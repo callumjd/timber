@@ -165,6 +165,7 @@ def read_off(mol,off_file):
             counter+=1
     return off_obj
 
+## May want to relax atom_type comparison here using GAFF or GAFF2 ##
 def compare_atom(atm1,atm2,tol=0.1):
     if (atm1.element==atm2.element) and (atm1.atom_type==atm2.atom_type) and (atm1.hybrid==atm2.hybrid) and (atm1.bond_count==atm2.bond_count) and abs(atm1.x-atm2.x)<tol and abs(atm1.y-atm2.y)<tol and abs(atm1.z-atm2.z)<tol:
         return True
