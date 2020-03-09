@@ -16,7 +16,6 @@ from rdkit.Chem import rdFMCS
 from rdkit.Chem import SDWriter
 from rdkit.Chem import ChemicalForceFields
 from rdkit.Chem import BRICS
-from rdkit.Chem import rdMolAlign
 from rdkit.Chem import rdmolops
 import distutils.spawn
 
