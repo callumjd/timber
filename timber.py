@@ -271,7 +271,7 @@ def write_pdb_file(mol,mol_amber,output_file,resi):
     for atom in mol.GetAtoms():
         mi = Chem.AtomPDBResidueInfo()
         mi.SetName(mol_amber[counter].name)
-        # the rdkit PDB residue name has incorrect whitespace`
+        # the rdkit PDB residue name has incorrect whitespace
         mi.SetResidueName(''.ljust(4-len(mol_amber[counter].name))+resi)
         mi.SetResidueNumber(1)
         mi.SetIsHeteroAtom(False)
