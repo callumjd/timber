@@ -113,7 +113,7 @@ def run_antechamber(mol,sdf_file,ff):
     os.system('parmchk -i UNL.mol2 -f mol2 -o missing_gaff.frcmod -at %s' % (ff))
 
     # clean SDF file for rdkit
-    os.system('antechamber -i UNL.mol2 -fi mol2 -o UNL.sdf -fo sdf')
+    os.system('antechamber -i UNL.mol2 -fi mol2 -o UNL.sdf -fo sdf -s 0 -pf y')
     
     with open('convert.leap','w') as f:
         f.write('source leaprc.%s\n' % (ff))
@@ -271,6 +271,7 @@ def write_pdb_file(mol,mol_amber,output_file,resi):
     for atom in mol.GetAtoms():
         mi = Chem.AtomPDBResidueInfo()
         mi.SetName(mol_amber[counter].name)
+        # the rdkit PDB residue name has incorrect whitespace`
         mi.SetResidueName(''.ljust(4-len(mol_amber[counter].name))+resi)
         mi.SetResidueNumber(1)
         mi.SetIsHeteroAtom(False)
@@ -281,9 +282,12 @@ def write_pdb_file(mol,mol_amber,output_file,resi):
     Chem.MolToPDBFile(mol,output_file,flavor=2)
 
     # CONECT records break leap
-    # a cleaner way would be to take the new pdb file 
-    # and just write the first mol.GetAtoms() lines
-    os.system('sed -i -e \'/CONECT/d\' %s' % (output_file))
+    with open(output_file,'r') as f:
+        pdb_data=f.readlines()
+
+    with open(output_file,'w') as f:
+        for i in range(0,len(mol.GetAtoms())):
+            f.write(pdb_data[i])
 
 def write_ti_strings(off_list,output_file):
     ti_region1=[]
