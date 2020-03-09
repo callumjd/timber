@@ -394,7 +394,7 @@ if __name__=='__main__':
             parm_mols=[]
             parm_off=[]
             for parm_dir in [dir_1_name,dir_2_name]:
-                mol=Chem.SDMolSupplier(parm_dir+'/UNL.sdf',removeHs=False)[0]
+                mol=Chem.SDMolSupplier(parm_dir+'/UNL.sdf',removeHs=False,sanitize=False)[0]
                 parm_mols.append(mol)
                 parm_off.append(read_off(mol,parm_dir+'/UNL.off'))
 
