@@ -54,10 +54,13 @@ def update_atom_position(mol1,mol2):
         frag_smarts.append(Chem.MolToSmarts(Chem.MolFromSmiles(smi_str)).replace(':','~').replace('-','~').replace('=','~').replace('#0','*'))
 
     seed=None
+    seed_hits=[]
     for query in frag_smarts:
         if mol_copy.HasSubstructMatch(Chem.MolFromSmarts(query)):
-            seed=query
-            break
+            seed_hits.append(query)
+
+    seed_hits.sort(key=len,reverse=True)
+    seed=seed_hits[0]
 
     # Now get MCSS
     res=rdFMCS.FindMCS([mol1,mol_copy],seedSmarts=seed)
