@@ -372,28 +372,40 @@ if __name__=='__main__':
             print('%s -> %s \n' % (pair[0],pair[1]))
 
             pair_dir=pair[0]+'_'+pair[1]
-            os.mkdir(pair_dir)
-            os.chdir(pair_dir)
+            if not os.path.isdir(pair_dir):
+                os.mkdir(pair_dir)
+                os.chdir(pair_dir)
 
-            os.mkdir(dir_1_name)
-            os.mkdir(dir_2_name)
+                os.mkdir(dir_1_name)
+                os.mkdir(dir_2_name)
+            else:
+                print('Error: directory exists %s.\n' % (pair_dir))
+                sys.exit()
 
     ## Write start ligand file, parameters ##
             os.chdir(dir_1_name)
             writer=SDWriter('for_parm.sdf')
-            writer.write(ligands[ligands_name.index(pair[0])])
-            writer.flush()
+            if ligands_name.count(pair[0])>0:
+                writer.write(ligands[ligands_name.index(pair[0])])
+                writer.flush()
+            else:
+                print('Error: cannot map ligand %s.\n' % (pair[0]))
+                sys.exit()
             run_antechamber(ligands[ligands_name.index(pair[0])],'for_parm.sdf',ff)
             os.chdir('../')
-
-    ## Check and fix XYZ coords of transform ligand ##
-            fix_mol=update_atom_position(ligands[ligands_name.index(pair[0])],ligands[ligands_name.index(pair[1])])
 
     ## Write endpoint ligand file, parameters ##
             os.chdir(dir_2_name)
             writer=SDWriter('for_parm.sdf')
-            writer.write(fix_mol)
-            writer.flush()
+            if ligands_name.count(pair[1])>0:
+    ## Check and fix XYZ coords of transform ligand ##
+                fix_mol=update_atom_position(ligands[ligands_name.index(pair[0])],ligands[ligands_name.index(pair[1])])
+
+                writer.write(fix_mol)
+                writer.flush()
+            else:
+                print('Error: cannot map ligand %s.\n' % (pair[1]))
+                sys.exit()
             run_antechamber(ligands[ligands_name.index(pair[1])],'for_parm.sdf',ff)
             os.chdir('../')
 
