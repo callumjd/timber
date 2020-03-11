@@ -231,7 +231,7 @@ def update_ti_atoms(mol_list,off_list):
         mol_copy=rdmolops.RenumberAtoms(mol_copy,write_core+write_last)
         out_mols.append(mol_copy)
 
-        # return matchin re-ordered amber off
+        # return matching re-ordered amber off
         mol_amber = [mol_amber[i] for i in write_core+write_last]
         out_off.append(mol_amber)
 
