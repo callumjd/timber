@@ -242,7 +242,7 @@ def write_amber_off(mol,mol_amber,output_file,resi):
         f.write('%s=loadpdb %s.pdb\n' % (resi,resi))
 
         for i in range(0,len(mol.GetAtoms())):
-            f.write('set %s.1.%s type %s\n' % (resi,mol_amber[i].name,mol_amber[i].atom_type))
+            f.write('set %s.1.%s type "%s"\n' % (resi,mol_amber[i].name,mol_amber[i].atom_type))
 
         for i in range(0,len(mol.GetAtoms())):
             f.write('set %s.1.%s charge %lf\n' % (resi,mol_amber[i].name,mol_amber[i].atom_charge))
