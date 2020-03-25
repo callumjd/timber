@@ -2,8 +2,8 @@
 TIMBER: a package to simplify setup of TI free energy calculations with AMBER.
 
 Requirements:
-    - Python3.6
-    - RDKit: https://www.rdkit.org/docs/Install.html 
+    - Python3.6 (https://www.continuum.io/downloads)
+    - RDKit (https://www.rdkit.org/docs/Install.html) 
 
 Usage:
 
