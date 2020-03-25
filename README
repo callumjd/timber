@@ -1,6 +1,10 @@
 
 TIMBER: a package to simplify setup of TI free energy calculations with AMBER.
 
+Requirements:
+    - Python3.6
+    - RDKit: https://www.rdkit.org/docs/Install.html 
+
 Usage:
 
 ./timber.py -i mapping.csv -sdf ligand_file.sdf -m setup -ff gaff
