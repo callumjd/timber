@@ -66,8 +66,30 @@ def update_atom_position(mol1,mol2):
     mcs_q=Chem.MolFromSmarts(res.smartsString)
 
     # Get atom IDs
-    template=mol1.GetSubstructMatches(mcs_q)[0]
-    hit_atom=mol_copy.GetSubstructMatches(mcs_q)[0]
+    template_list=mol1.GetSubstructMatches(mcs_q)
+    hit_atom_list=mol_copy.GetSubstructMatches(mcs_q)
+
+    ss_match_pairs=[]
+    ss_distance=[]
+    for template_opts in template_list:
+        for hit_atom_opts in hit_atom_list:
+            ss_match_pairs.append((template_opts,hit_atom_opts))
+            running_distance=0
+            for i in range(len(template_opts)):
+                origin=mol1.GetConformer().GetAtomPosition(template_opts[i])
+                pos=mol_copy.GetConformer().GetAtomPosition(hit_atom_opts[i])
+
+                p1=np.array([origin.x,origin.y,origin.z])
+                p2=np.array([pos.x,pos.y,pos.z])
+
+                sq_dist=np.sum((p1-p2)**2,axis=0)
+                dist=np.sqrt(sq_dist)
+
+                running_distance+=dist
+            ss_distance.append(running_distance)
+
+    index_min_pair=ss_distance.index(min(ss_distance))
+    template,hit_atom=ss_match_pairs[index_min_pair]
 
     # Update XYZ coords of MCSS
     running_distance=0
