@@ -105,7 +105,8 @@ def update_atom_position(mol1,mol2):
 
         running_distance+=dist
 
-        mol_copy.GetConformer().SetAtomPosition(hit_atom[i],(origin.x,origin.y,origin.z))
+        if mol_copy.GetAtomWithIdx(hit_atom[i]).GetAtomicNum()!=1:
+            mol_copy.GetConformer().SetAtomPosition(hit_atom[i],(origin.x,origin.y,origin.z))
 
     if running_distance>0.1:
         # relax atoms outside MCSS
@@ -119,11 +120,51 @@ def update_atom_position(mol1,mol2):
         ff=ChemicalForceFields.MMFFGetMoleculeForceField(mol_copy,mp)
 
         for val in hit_atom:
-            ff.AddFixedPoint(val)
+            if mol_copy.GetAtomWithIdx(val).GetAtomicNum()!=1:
+                ff.AddFixedPoint(val)
         for val in res_atom:
             ff.MMFFAddPositionConstraint(val,1,5)
 
         ff.Minimize()
+
+    # repeat again to fix hydrogen positions
+    ss_match_pairs=[]
+    ss_distance=[]
+    for template_opts in template_list:
+        for hit_atom_opts in hit_atom_list:
+            ss_match_pairs.append((template_opts,hit_atom_opts))
+            running_distance=0
+            for i in range(len(template_opts)):
+                origin=mol1.GetConformer().GetAtomPosition(template_opts[i])
+                pos=mol_copy.GetConformer().GetAtomPosition(hit_atom_opts[i])
+
+                p1=np.array([origin.x,origin.y,origin.z])
+                p2=np.array([pos.x,pos.y,pos.z])
+
+                sq_dist=np.sum((p1-p2)**2,axis=0)
+                dist=np.sqrt(sq_dist)
+
+                running_distance+=dist
+            ss_distance.append(running_distance)
+
+    index_min_pair=ss_distance.index(min(ss_distance))
+    template,hit_atom=ss_match_pairs[index_min_pair]
+
+    # Update XYZ coords of MCSS
+    running_distance=0
+    for i in range(0,len(template)):
+        origin=mol1.GetConformer().GetAtomPosition(template[i])
+        pos=mol_copy.GetConformer().GetAtomPosition(hit_atom[i])
+
+        p1=np.array([origin.x,origin.y,origin.z])
+        p2=np.array([pos.x,pos.y,pos.z])
+
+        sq_dist=np.sum((p1-p2)**2,axis=0)
+        dist=np.sqrt(sq_dist)
+
+        running_distance+=dist
+
+        mol_copy.GetConformer().SetAtomPosition(hit_atom[i],(origin.x,origin.y,origin.z))
 
     return mol_copy
 
