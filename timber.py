@@ -18,6 +18,7 @@ from rdkit.Chem import ChemicalForceFields
 from rdkit.Chem import BRICS
 from rdkit.Chem import rdmolops
 import distutils.spawn
+from ligprep_tools import *
 
 ###############################################################################
 
@@ -168,77 +169,18 @@ def update_atom_position(mol1,mol2):
 
     return mol_copy
 
-def run_antechamber(mol,sdf_file,ff):
-    net_charge=int(rdmolops.GetFormalCharge(mol))
-    
-    os.system('antechamber -i %s -fi sdf -o UNL.mol2 -fo mol2 -rn UNL -nc %d -at %s -c bcc -s 0 -pf y' % (sdf_file,net_charge,ff))
-
-    os.system('parmchk -i UNL.mol2 -f mol2 -o missing_gaff.frcmod -at %s' % (ff))
-
-    # clean SDF file for rdkit
-    os.system('antechamber -i UNL.mol2 -fi mol2 -o UNL.sdf -fo sdf -s 0 -pf y')
-    
-    with open('convert.leap','w') as f:
-        f.write('source leaprc.%s\n' % (ff))
-        f.write('UNL=loadmol2 UNL.mol2\n')
-        f.write('saveoff UNL UNL.off\n')
-        f.write('quit')
-
-    os.system('tleap -f convert.leap>out')
-
-class Amber_atom(object):
-    def __init__(self,name,element,atom_type,atom_charge,hybrid=None,bond_count=None,x=None,y=None,z=None,core=None):
-        self.name=name
-        self.element=element
-        self.atom_type=atom_type
-        self.atom_charge=atom_charge
-
-        self.hybrid=hybrid
-        self.bond_count=bond_count
-        self.x=x
-        self.y=y
-        self.z=z
-        self.core=core
-
-def read_off(mol,off_file):
-    off_obj=[]
-    start=0
-    with open(off_file,'r') as f:
-        for line in f:
-            start+=1
-            if '!entry' in line:
-                break
-
-    counter=0
-    with open(off_file,'r') as f:
-        for line in f:
-            if (start-1<counter<len(mol.GetAtoms())+start):
-                name=line.split()[0].strip('"')
-                element=mol.GetAtomWithIdx(counter-start).GetAtomicNum()
-                atom_type=line.split()[1].strip('"')
-                atom_charge=float(line.split()[7])
-                hybridization=mol.GetAtomWithIdx(counter-start).GetHybridization()
-                bond_count=int(len(mol.GetAtomWithIdx(counter-start).GetBonds()))
-                x=float(mol.GetConformer().GetAtomPosition(counter-start).x)
-                y=float(mol.GetConformer().GetAtomPosition(counter-start).y)
-                z=float(mol.GetConformer().GetAtomPosition(counter-start).z)
-
-                off_obj.append(Amber_atom(name,element,atom_type,atom_charge,hybridization,bond_count,x,y,z,False))
-            counter+=1
-    return off_obj
-
 ## May want to relax atom_type comparison here using GAFF or GAFF2 ##
 def compare_atom(atm1,atm2,tol=0.1):
-    if (atm1.element==atm2.element) and (atm1.atom_type==atm2.atom_type) and (atm1.hybrid==atm2.hybrid) and (atm1.bond_count==atm2.bond_count) and abs(atm1.x-atm2.x)<tol and abs(atm1.y-atm2.y)<tol and abs(atm1.z-atm2.z)<tol:
+    if (atm1.mass==atm2.mass) and (atm1.atom_type==atm2.atom_type) and (atm1.hybrid==atm2.hybrid) and (atm1.bond_count==atm2.bond_count) and abs(atm1.x-atm2.x)<tol and abs(atm1.y-atm2.y)<tol and abs(atm1.z-atm2.z)<tol:
         return True
     else:
         return False
 
 def compare_mols(mol_off1,mol_off2):
     match=[]
-    for i in range(0,len(mol_off2)):
-        for j in range(0,len(mol_off1)):
-            if compare_atom(mol_off1[j],mol_off2[i]):
+    for i in range(0,len(mol_off2.atoms)):
+        for j in range(0,len(mol_off1.atoms)):
+            if compare_atom(mol_off1.atoms[j],mol_off2.atoms[i]):
                 match.append(j)
     return match
 
@@ -250,9 +192,9 @@ def update_ti_atoms(mol_list,off_list):
 
     matches=compare_mols(off_list[0],off_list[1])
 
-    MCS_atoms_amber=[]
+    MCS_atoms_amber=Molecule_ff(name='MCS_atoms')
     for i in matches:
-        MCS_atoms_amber.append(off_list[0][i])
+        MCS_atoms_amber.add_atom(off_list[0].atoms[i])
 
     out_mols=[]
     out_off=[]
@@ -264,9 +206,9 @@ def update_ti_atoms(mol_list,off_list):
 
         mol_copy=Chem.Mol(mol)
 
-        for i in range(0,len(MCS_atoms_amber)):
+        for i in range(0,len(MCS_atoms_amber.atoms)):
             for j in range(0,len(mol.GetAtoms())):
-                if compare_atom(MCS_atoms_amber[i],mol_amber[j]) and j not in write_core:
+                if compare_atom(MCS_atoms_amber.atoms[i],mol_amber.atoms[j]) and j not in write_core:
                     write_core.append(j)
 
         for i in range(0,len(mol.GetAtoms())):
@@ -275,86 +217,36 @@ def update_ti_atoms(mol_list,off_list):
 
         for i in range(0,len(mol.GetAtoms())):
             if i in write_core:
-                mol_amber[i].core=True
+                mol_amber.atoms[i].core=True
             elif i in write_last:
-                mol_amber[i].core=False
+                mol_amber.atoms[i].core=False
 
         for i in write_core:
-            new_atom_name=periodic[str(mol_amber[i].element)]+str(ele_count[int(mol_amber[i].element)])
-            mol_amber[i].name=new_atom_name
-            ele_count[int(mol_amber[i].element)]+=1
+            new_atom_name=periodic[str(mol_amber.atoms[i].mass)]+str(ele_count[int(mol_amber.atoms[i].mass)])
+            mol_amber.atoms[i].name=new_atom_name
+            ele_count[int(mol_amber.atoms[i].mass)]+=1
 
         for i in range(0,len(mol.GetAtoms())):
-            if mol_amber[i].core==False:
-                new_atom_name=periodic[str(mol_amber[i].element)]+str(ele_count[int(mol_amber[i].element)])
-                mol_amber[i].name=new_atom_name
-                ele_count[int(mol_amber[i].element)]+=1
+            if mol_amber.atoms[i].core==False:
+                new_atom_name=periodic[str(mol_amber.atoms[i].mass)]+str(ele_count[int(mol_amber.atoms[i].mass)])
+                mol_amber.atoms[i].name=new_atom_name
+                ele_count[int(mol_amber.atoms[i].mass)]+=1
 
         # return a re-ordered mol
         mol_copy=rdmolops.RenumberAtoms(mol_copy,write_core+write_last)
         out_mols.append(mol_copy)
 
         # return matching re-ordered amber off
-        mol_amber = [mol_amber[i] for i in write_core+write_last]
+        mol_amber.reorder_atoms(write_core+write_last)
+        mol_amber.clear_bonds()
+        mol_amber=add_rd_bonds(mol_copy,mol_amber)
         out_off.append(mol_amber)
 
     return out_mols,out_off
 
-def write_amber_off(mol,mol_amber,output_file,resi):
-    with open('make_off.leap','w') as f:
-        f.write('%s=loadpdb %s.pdb\n' % (resi,resi))
-
-        for i in range(0,len(mol.GetAtoms())):
-            f.write('set %s.1.%s type "%s"\n' % (resi,mol_amber[i].name,mol_amber[i].atom_type))
-
-        for i in range(0,len(mol.GetAtoms())):
-            f.write('set %s.1.%s charge %lf\n' % (resi,mol_amber[i].name,mol_amber[i].atom_charge))
-
-        # bonds
-        bond_list=[]
-        for atom in mol.GetAtoms():
-            for bond in atom.GetBonds():
-                a1=bond.GetBeginAtomIdx()
-                b1=bond.GetEndAtomIdx()
-
-                if [a1,b1] not in bond_list and [b1,a1] not in bond_list:
-                    bond_list.append([a1,b1])
-
-        for val in bond_list:
-            f.write('bond %s.1.%s %s.1.%s\n' % (resi,mol_amber[val[0]].name,resi,mol_amber[val[1]].name))
-
-        f.write('saveoff %s %s\n' % (resi,output_file))
-        f.write('quit')
-
-    os.system('tleap -f make_off.leap>out')
-
-def write_pdb_file(mol,mol_amber,output_file,resi):
-
-    counter=0
-    for atom in mol.GetAtoms():
-        mi = Chem.AtomPDBResidueInfo()
-        mi.SetName(mol_amber[counter].name)
-        # the rdkit PDB residue name has incorrect whitespace
-        mi.SetResidueName(''.ljust(4-len(mol_amber[counter].name))+resi)
-        mi.SetResidueNumber(1)
-        mi.SetIsHeteroAtom(False)
-        atom.SetMonomerInfo(mi)
-
-        counter+=1
-
-    Chem.MolToPDBFile(mol,output_file,flavor=2)
-
-    # CONECT records break leap
-    with open(output_file,'r') as f:
-        pdb_data=f.readlines()
-
-    with open(output_file,'w') as f:
-        for i in range(0,len(mol.GetAtoms())):
-            f.write(pdb_data[i])
-
 def write_ti_strings(off_list,output_file):
     ti_region1=[]
-    for atom in off_list[0]:
+    for atom in off_list[0].atoms:
         if not atom.core:
             ti_region1.append(atom.name)
 
@@ -363,7 +255,7 @@ def write_ti_strings(off_list,output_file):
         ti_str1=ti_str1+str(at)+','
 
     ti_region2=[]
-    for atom in off_list[1]:
+    for atom in off_list[1].atoms:
         if not atom.core:
             ti_region2.append(atom.name)
 
@@ -454,7 +346,19 @@ if __name__=='__main__':
             else:
                 print('Error: cannot map ligand %s.\n' % (pair[0]))
                 sys.exit()
-            run_antechamber(ligands[ligands_name.index(pair[0])],'for_parm.sdf',ff)
+            run_antechamber('for_parm.sdf','UNL',ff,int(rdmolops.GetFormalCharge(ligands[ligands_name.index(pair[0])])))
+
+            # setup Molecule_ff
+            LIG=Molecule_ff(name='LIG')
+            n_atoms=len(ligands[ligands_name.index(pair[0])].GetAtoms())
+            for at in ligands[ligands_name.index(pair[0])].GetAtoms():
+                x=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).x
+                y=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).y
+                z=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).z
+                LIG.add_atom(Atom_ff(idx=at.GetIdx(),mass=at.GetAtomicNum(),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=x,y=y,z=z))
+            LIG=Info_Mol2('UNL.mol2',LIG,n_atoms,fields=['name','type','charge'])
+            LIG=add_rd_bonds(ligands[ligands_name.index(pair[0])],LIG)
+
             os.chdir('../')
 
     ## Write endpoint ligand file, parameters ##
@@ -469,31 +373,46 @@ if __name__=='__main__':
             else:
                 print('Error: cannot map ligand %s.\n' % (pair[1]))
                 sys.exit()
-            run_antechamber(ligands[ligands_name.index(pair[1])],'for_parm.sdf',ff)
+            run_antechamber('for_parm.sdf','UNL',ff,int(rdmolops.GetFormalCharge(ligands[ligands_name.index(pair[1])])))
+
+            # setup Molecule_ff
+            MOD=Molecule_ff(name='MOD')
+            n_atoms=len(fix_mol.GetAtoms())
+            for at in fix_mol.GetAtoms(): 
+                x=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).x
+                y=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).y
+                z=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).z
+                MOD.add_atom(Atom_ff(idx=at.GetIdx(),mass=at.GetAtomicNum(),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=x,y=y,z=z))
+            MOD=Info_Mol2('UNL.mol2',MOD,n_atoms,fields=['name','type','charge'])
+            MOD=add_rd_bonds(fix_mol,MOD)
+
             os.chdir('../')
 
     ## Now rename and re-order start and endpoint ligand atoms so that TI region is at the end
             parm_mols=[]
-            parm_off=[]
+            parm_off=[LIG,MOD]
             for parm_dir in [dir_1_name,dir_2_name]:
                 mol=Chem.SDMolSupplier(parm_dir+'/UNL.sdf',removeHs=False,sanitize=False)[0]
                 parm_mols.append(mol)
-                parm_off.append(read_off(mol,parm_dir+'/UNL.off'))
 
             # pass a new copy of the off objects since they get modified
             # return re-ordered [mol1,mol2] and [off1,off2]
             refit_mols,refit_offs=update_ti_atoms(parm_mols,list(parm_off))
 
             os.chdir(dir_1_name)
-            write_pdb_file(refit_mols[0],refit_offs[0],'LIG.pdb','LIG')
-            write_amber_off(refit_mols[0],refit_offs[0],'LIG.off','LIG')
+            write_rd_pdb(refit_offs[0],refit_mols[0],refit_offs[0].name,'LIG.pdb')
+            make_off(refit_offs[0],'make_off.leap')
+            os.system('tleap -f make_off.leap>out')
+            os.system('rm out make_off.leap')
             os.chdir('../')
 
             os.chdir(dir_2_name)
-            write_pdb_file(refit_mols[1],refit_offs[1],'MOD.pdb','MOD')
-            write_amber_off(refit_mols[1],refit_offs[1],'MOD.off','MOD')
+            write_rd_pdb(refit_offs[1],refit_mols[1],refit_offs[1].name,'MOD.pdb')
+            make_off(refit_offs[1],'make_off.leap')
+            os.system('tleap -f make_off.leap>out')
+            os.system('rm out make_off.leap')
             os.chdir('../')
-
+        
             write_ti_strings(refit_offs,'TI_MASKS.dat')
 
     ## Exit pair directory
@@ -501,5 +420,4 @@ if __name__=='__main__':
 
     print('Setup complete.\n')
 
-###############################################################################
-
+################################################################################
