@@ -219,10 +219,18 @@ class Dihedral_ff(object):
 
         if frc is not None:
             self._frc=list(frc)
+        else:
+            self._frc=[]
+
         if period is not None:
             self._period=list(period)
+        else:
+            self._period=[]
+
         if phase is not None:
             self._phase=list(phase)
+        else:
+            self._phase=[]
 
     @property
     def frc(self):
@@ -514,7 +522,10 @@ def save_dihed(mol_ff,Dihed_file):
                 else:
                     dihed_idx=mol_ff.query_dihedral_idx(mol_ff.query_dihedral_atomIdx(at1_idx,at2_idx,at3_idx,at4_idx))
                     if period_val not in mol_ff.dihedrals[dihed_idx].period:
-                        mol_ff.dihedrals[dihed_idx].n_terms=mol_ff.dihedrals[dihed_idx].n_terms+1
+                        if mol_ff.dihedrals[dihed_idx].n_terms==None:
+                            mol_ff.dihedrals[dihed_idx].n_terms=1
+                        else:
+                            mol_ff.dihedrals[dihed_idx].n_terms=mol_ff.dihedrals[dihed_idx].n_terms+1
                         mol_ff.dihedrals[dihed_idx].frc.append(frc_val)
                         mol_ff.dihedrals[dihed_idx].period.append(period_val)
                         mol_ff.dihedrals[dihed_idx].phase.append(phase_val)
