@@ -391,7 +391,7 @@ def make_off(mol_ff,file_name):
         f.write('quit\n')
 
 # run antechamber
-def run_antechamber(input_file,residue_name,ff,net_charge=None):
+def run_antechamber(input_file,residue_name,ff,net_charge=None,clean_sdf=False):
 
     file_format=input_file.split('.')[1]
     if file_format in ['mol2','sdf'] and ff in ['gaff','gaff2']:
@@ -402,7 +402,8 @@ def run_antechamber(input_file,residue_name,ff,net_charge=None):
         os.system('parmchk2 -i %s.mol2 -f mol2 -o missing_gaff.frcmod -at %s' % (residue_name,ff))
 
     # clean SDF file for rdkit
-    os.system('antechamber -i %s.mol2 -fi mol2 -o %s.sdf -fo sdf -s 0 -pf y' % (residue_name,residue_name))
+    if clean_sdf:
+        os.system('antechamber -i %s.mol2 -fi mol2 -o %s.sdf -fo sdf -s 0 -pf y' % (residue_name,residue_name))
 
 # write file to build amber prmtop
 def build_parm(residue_name,ff,file_name):
@@ -541,16 +542,15 @@ def write_rd_pdb(mol_ff,rd_mol,residue_name,output_file):
     Chem.MolToPDBFile(rd_mol,output_file,flavor=2)
 
     # CONECT records break leap
+    pdb_data=[]
     with open(output_file,'r') as f:
-        pdb_data=f.readlines()
+        for line in f:
+            if line.split()[0]=='ATOM' or line.split()[0]=='HETATM':
+                pdb_data.append(line)
 
     with open(output_file,'w') as f:
-        for i in range(0,len(rd_mol.GetAtoms())):
-            f.write(pdb_data[i])
+        for line in pdb_data: 
+            f.write(line)
 
 ##############################################################################
-## MAIN ##
-##############################################################################
 
-if __name__=='__main__':
-    print('Hello World')

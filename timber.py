@@ -333,90 +333,90 @@ if __name__=='__main__':
 
                 os.mkdir(dir_1_name)
                 os.mkdir(dir_2_name)
-            else:
-                print('Error: directory exists %s.\n' % (pair_dir))
-                sys.exit()
 
     ## Write start ligand file, parameters ##
-            os.chdir(dir_1_name)
-            writer=SDWriter('for_parm.sdf')
-            if ligands_name.count(pair[0])>0:
-                writer.write(ligands[ligands_name.index(pair[0])])
-                writer.flush()
-            else:
-                print('Error: cannot map ligand %s.\n' % (pair[0]))
-                sys.exit()
-            run_antechamber('for_parm.sdf','UNL',ff,int(rdmolops.GetFormalCharge(ligands[ligands_name.index(pair[0])])))
+                os.chdir(dir_1_name)
+                writer=SDWriter('for_parm.sdf')
+                if ligands_name.count(pair[0])>0:
+                    writer.write(ligands[ligands_name.index(pair[0])])
+                    writer.flush()
+                else:
+                    print('Error: cannot map ligand %s.\n' % (pair[0]))
+                    sys.exit()
+                run_antechamber('for_parm.sdf','UNL',ff,int(rdmolops.GetFormalCharge(ligands[ligands_name.index(pair[0])])),clean_sdf=True)
 
-            # setup Molecule_ff
-            LIG=Molecule_ff(name='LIG')
-            n_atoms=len(ligands[ligands_name.index(pair[0])].GetAtoms())
-            for at in ligands[ligands_name.index(pair[0])].GetAtoms():
-                x=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).x
-                y=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).y
-                z=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).z
-                LIG.add_atom(Atom_ff(idx=at.GetIdx(),mass=at.GetAtomicNum(),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=x,y=y,z=z))
-            LIG=Info_Mol2('UNL.mol2',LIG,n_atoms,fields=['name','type','charge'])
-            LIG=add_rd_bonds(ligands[ligands_name.index(pair[0])],LIG)
+                # setup Molecule_ff
+                LIG=Molecule_ff(name='LIG')
+                n_atoms=len(ligands[ligands_name.index(pair[0])].GetAtoms())
+                for at in ligands[ligands_name.index(pair[0])].GetAtoms():
+                    x=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).x
+                    y=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).y
+                    z=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).z
+                    LIG.add_atom(Atom_ff(idx=at.GetIdx(),mass=at.GetAtomicNum(),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=x,y=y,z=z))
+                LIG=Info_Mol2('UNL.mol2',LIG,n_atoms,fields=['name','type','charge'])
+                LIG=add_rd_bonds(ligands[ligands_name.index(pair[0])],LIG)
 
-            os.chdir('../')
+                os.chdir('../')
 
     ## Write endpoint ligand file, parameters ##
-            os.chdir(dir_2_name)
-            writer=SDWriter('for_parm.sdf')
-            if ligands_name.count(pair[1])>0:
+                os.chdir(dir_2_name)
+                writer=SDWriter('for_parm.sdf')
+                if ligands_name.count(pair[1])>0:
     ## Check and fix XYZ coords of transform ligand ##
-                fix_mol=update_atom_position(ligands[ligands_name.index(pair[0])],ligands[ligands_name.index(pair[1])])
+                    fix_mol=update_atom_position(ligands[ligands_name.index(pair[0])],ligands[ligands_name.index(pair[1])])
 
-                writer.write(fix_mol)
-                writer.flush()
-            else:
-                print('Error: cannot map ligand %s.\n' % (pair[1]))
-                sys.exit()
-            run_antechamber('for_parm.sdf','UNL',ff,int(rdmolops.GetFormalCharge(ligands[ligands_name.index(pair[1])])))
+                    writer.write(fix_mol)
+                    writer.flush()
+                else:
+                    print('Error: cannot map ligand %s.\n' % (pair[1]))
+                    sys.exit()
+                run_antechamber('for_parm.sdf','UNL',ff,int(rdmolops.GetFormalCharge(ligands[ligands_name.index(pair[1])])),clean_sdf=True)
 
-            # setup Molecule_ff
-            MOD=Molecule_ff(name='MOD')
-            n_atoms=len(fix_mol.GetAtoms())
-            for at in fix_mol.GetAtoms(): 
-                x=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).x
-                y=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).y
-                z=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).z
-                MOD.add_atom(Atom_ff(idx=at.GetIdx(),mass=at.GetAtomicNum(),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=x,y=y,z=z))
-            MOD=Info_Mol2('UNL.mol2',MOD,n_atoms,fields=['name','type','charge'])
-            MOD=add_rd_bonds(fix_mol,MOD)
+                # setup Molecule_ff
+                MOD=Molecule_ff(name='MOD')
+                n_atoms=len(fix_mol.GetAtoms())
+                for at in fix_mol.GetAtoms(): 
+                    x=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).x
+                    y=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).y
+                    z=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).z
+                    MOD.add_atom(Atom_ff(idx=at.GetIdx(),mass=at.GetAtomicNum(),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=x,y=y,z=z))
+                MOD=Info_Mol2('UNL.mol2',MOD,n_atoms,fields=['name','type','charge'])
+                MOD=add_rd_bonds(fix_mol,MOD)
 
-            os.chdir('../')
+                os.chdir('../')
 
     ## Now rename and re-order start and endpoint ligand atoms so that TI region is at the end
-            parm_mols=[]
-            parm_off=[LIG,MOD]
-            for parm_dir in [dir_1_name,dir_2_name]:
-                mol=Chem.SDMolSupplier(parm_dir+'/UNL.sdf',removeHs=False,sanitize=False)[0]
-                parm_mols.append(mol)
+                parm_mols=[]
+                parm_off=[LIG,MOD]
+                for parm_dir in [dir_1_name,dir_2_name]:
+                    mol=Chem.SDMolSupplier(parm_dir+'/UNL.sdf',removeHs=False,sanitize=False)[0]
+                    parm_mols.append(mol)
 
-            # pass a new copy of the off objects since they get modified
-            # return re-ordered [mol1,mol2] and [off1,off2]
-            refit_mols,refit_offs=update_ti_atoms(parm_mols,list(parm_off))
+                # pass a new copy of the off objects since they get modified
+                # return re-ordered [mol1,mol2] and [off1,off2]
+                refit_mols,refit_offs=update_ti_atoms(parm_mols,list(parm_off))
 
-            os.chdir(dir_1_name)
-            write_rd_pdb(refit_offs[0],refit_mols[0],refit_offs[0].name,'LIG.pdb')
-            make_off(refit_offs[0],'make_off.leap')
-            os.system('tleap -f make_off.leap>out')
-            os.system('rm out make_off.leap')
-            os.chdir('../')
+                os.chdir(dir_1_name)
+                write_rd_pdb(refit_offs[0],refit_mols[0],refit_offs[0].name,'LIG.pdb')
+                make_off(refit_offs[0],'make_off.leap')
+                os.system('tleap -f make_off.leap>out')
+                os.system('rm out make_off.leap')
+                os.chdir('../')
 
-            os.chdir(dir_2_name)
-            write_rd_pdb(refit_offs[1],refit_mols[1],refit_offs[1].name,'MOD.pdb')
-            make_off(refit_offs[1],'make_off.leap')
-            os.system('tleap -f make_off.leap>out')
-            os.system('rm out make_off.leap')
-            os.chdir('../')
+                os.chdir(dir_2_name)
+                write_rd_pdb(refit_offs[1],refit_mols[1],refit_offs[1].name,'MOD.pdb')
+                make_off(refit_offs[1],'make_off.leap')
+                os.system('tleap -f make_off.leap>out')
+                os.system('rm out make_off.leap')
+                os.chdir('../')
         
-            write_ti_strings(refit_offs,'TI_MASKS.dat')
+                write_ti_strings(refit_offs,'TI_MASKS.dat')
 
     ## Exit pair directory
-            os.chdir('../')
+                os.chdir('../')
+
+            else:
+                print('Error: directory exists %s.\n' % (pair_dir))
 
     print('Setup complete.\n')
 
