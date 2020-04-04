@@ -211,7 +211,7 @@ class Angle_ff(object):
         self.ref_angle=ref_angle
 
 class Dihedral_ff(object):
-    def __init__(self,atom1,atom2,atom3,atom4,frc=None,period=None,phase=None,n_terms=None,improper=None):
+    def __init__(self,atom1,atom2,atom3,atom4,frc=None,period=None,phase=None,n_terms=None,improper=False):
         self.atom1=atom1
         self.atom2=atom2
         self.atom3=atom3
