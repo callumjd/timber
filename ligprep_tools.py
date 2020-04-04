@@ -571,10 +571,10 @@ def write_rd_pdb(mol_ff,rd_mol,residue_name,output_file):
             f.write(line)
 
 def norm_len(atom_char):
-        if len(atom_char)>1:
+        if len(str(atom_char))>1:
                 return str(atom_char)
-        elif len(atom_char)==1:
-                return str(atom_char+' ')
+        elif len(str(atom_char))==1:
+                return str(atom_char)+' '
 
 def write_frcmod(file_name,types,bonds,angles,dihedrals):
     with open(file_name,'w') as f:
