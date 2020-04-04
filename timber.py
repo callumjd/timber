@@ -171,7 +171,7 @@ def update_atom_position(mol1,mol2):
 
 ## May want to relax atom_type comparison here using GAFF or GAFF2 ##
 def compare_atom(atm1,atm2,tol=0.1):
-    if (atm1.mass==atm2.mass) and (atm1.atom_type==atm2.atom_type) and (atm1.hybrid==atm2.hybrid) and (atm1.bond_count==atm2.bond_count) and abs(atm1.x-atm2.x)<tol and abs(atm1.y-atm2.y)<tol and abs(atm1.z-atm2.z)<tol:
+    if (atm1.atomic_num==atm2.atomic_num) and (atm1.atom_type==atm2.atom_type) and (atm1.hybrid==atm2.hybrid) and (atm1.bond_count==atm2.bond_count) and abs(atm1.x-atm2.x)<tol and abs(atm1.y-atm2.y)<tol and abs(atm1.z-atm2.z)<tol:
         return True
     else:
         return False
@@ -222,15 +222,15 @@ def update_ti_atoms(mol_list,off_list):
                 mol_amber.atoms[i].core=False
 
         for i in write_core:
-            new_atom_name=periodic[str(mol_amber.atoms[i].mass)]+str(ele_count[int(mol_amber.atoms[i].mass)])
+            new_atom_name=periodic[str(mol_amber.atoms[i].atomic_num)]+str(ele_count[int(mol_amber.atoms[i].atomic_num)])
             mol_amber.atoms[i].name=new_atom_name
-            ele_count[int(mol_amber.atoms[i].mass)]+=1
+            ele_count[int(mol_amber.atoms[i].atomic_num)]+=1
 
         for i in range(0,len(mol.GetAtoms())):
             if mol_amber.atoms[i].core==False:
-                new_atom_name=periodic[str(mol_amber.atoms[i].mass)]+str(ele_count[int(mol_amber.atoms[i].mass)])
+                new_atom_name=periodic[str(mol_amber.atoms[i].atomic_num)]+str(ele_count[int(mol_amber.atoms[i].atomic_num)])
                 mol_amber.atoms[i].name=new_atom_name
-                ele_count[int(mol_amber.atoms[i].mass)]+=1
+                ele_count[int(mol_amber.atoms[i].atomic_num)]+=1
 
         # return a re-ordered mol
         mol_copy=rdmolops.RenumberAtoms(mol_copy,write_core+write_last)
@@ -352,7 +352,7 @@ if __name__=='__main__':
                     x=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).x
                     y=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).y
                     z=ligands[ligands_name.index(pair[0])].GetConformer().GetAtomPosition(at.GetIdx()).z
-                    LIG.add_atom(Atom_ff(idx=at.GetIdx(),mass=at.GetAtomicNum(),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=x,y=y,z=z))
+                    LIG.add_atom(Atom_ff(idx=at.GetIdx(),atomic_num=at.GetAtomicNum(),atomic_weight=Chem.GetPeriodicTable().GetAtomicWeight(at.GetAtomicNum()),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=x,y=y,z=z))
                 LIG=Info_Mol2('UNL.mol2',LIG,n_atoms,fields=['name','type','charge'])
                 LIG=add_rd_bonds(ligands[ligands_name.index(pair[0])],LIG)
 
@@ -379,7 +379,7 @@ if __name__=='__main__':
                     x=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).x
                     y=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).y
                     z=fix_mol.GetConformer().GetAtomPosition(at.GetIdx()).z
-                    MOD.add_atom(Atom_ff(idx=at.GetIdx(),mass=at.GetAtomicNum(),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=x,y=y,z=z))
+                    MOD.add_atom(Atom_ff(idx=at.GetIdx(),atomic_num=at.GetAtomicNum(),atomic_weight=Chem.GetPeriodicTable().GetAtomicWeight(at.GetAtomicNum()),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=x,y=y,z=z))
                 MOD=Info_Mol2('UNL.mol2',MOD,n_atoms,fields=['name','type','charge'])
                 MOD=add_rd_bonds(fix_mol,MOD)
 

@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 import sys
 import os
-import copy
-import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -86,14 +84,14 @@ class Molecule_ff():
 
         return bond_out
 
-    def query_bond_atomIdx(self,at_idx1,at_idx2):
+    def query_bond_atomIdx(self,at1_idx,at2_idx):
 
         bond_out=None
         for bond in self._bonds:
-            if bond.atom1.idx==at_idx1 and bond.atom2.idx==at_idx2:
+            if bond.atom1.idx==at1_idx and bond.atom2.idx==at2_idx:
                 bond_out=bond
                 break
-            elif bond.atom1.idx==at_idx2 and bond.atom2.idx==at_idx1:
+            elif bond.atom1.idx==at2_idx and bond.atom2.idx==at1_idx:
                 bond_out=bond
                 break
 
@@ -116,14 +114,14 @@ class Molecule_ff():
 
         return angle_out
 
-    def query_angle_atomIdx(self,at_idx1,at_idx2,at_idx3):
+    def query_angle_atomIdx(self,at1_idx,at2_idx,at3_idx):
 
         angle_out=None
         for angle in self._angles:
-            if angle.atom1.idx==at_idx1 and angle.atom2.idx==at_idx2 and angle.atom3.idx==at_idx3:
+            if angle.atom1.idx==at1_idx and angle.atom2.idx==at2_idx and angle.atom3.idx==at3_idx:
                 angle_out=angle
                 break
-            elif angle.atom1.idx==at_idx3 and angle.atom2.idx==at_idx2 and angle.atom3.idx==at_idx1:
+            elif angle.atom1.idx==at3_idx and angle.atom2.idx==at2_idx and angle.atom3.idx==at1_idx:
                 angle_out=angle
                 break
 
@@ -146,14 +144,14 @@ class Molecule_ff():
 
         return dihed_out
 
-    def query_dihedral_atomIdx(self,at_idx1,at_idx2,at_idx3,at_idx4):
+    def query_dihedral_atomIdx(self,at1_idx,at2_idx,at3_idx,at4_idx):
 
         dihed_out=None
         for dihed in self._dihedrals:
-            if dihed.atom1.idx==at_idx1 and dihed.atom2.idx==at_idx2 and dihed.atom3.idx==at_idx3 and dihed.atom4.idx==at_idx4:
+            if dihed.atom1.idx==at1_idx and dihed.atom2.idx==at2_idx and dihed.atom3.idx==at3_idx and dihed.atom4.idx==at4_idx:
                 dihed_out=dihed
                 break
-            elif dihed.atom1.idx==at_idx4 and dihed.atom2.idx==at_idx3 and dihed.atom3.idx==at_idx2 and dihed.atom4.idx==at_idx1:
+            elif dihed.atom1.idx==at4_idx and dihed.atom2.idx==at3_idx and dihed.atom3.idx==at2_idx and dihed.atom4.idx==at1_idx:
                 dihed_out=dihed
                 break
 
@@ -179,10 +177,10 @@ class Molecule_ff():
         self._atoms=[self._atoms[i] for i in new_order]
 
 class Atom_ff(object):
-    def __init__(self,idx,name=None,mass=None,element=None,atom_type=None,atom_charge=None,lj_R=None,lj_E=None,hybrid=None,bond_count=None,x=None,y=None,z=None,ti_core=None):
+    def __init__(self,idx,name=None,atomic_num=None,atomic_weight=None,element=None,atom_type=None,atom_charge=None,lj_R=None,lj_E=None,hybrid=None,bond_count=None,x=None,y=None,z=None,ti_core=None):
         self.idx=idx
-        self.name=name
-        self.mass=mass
+        self.atomic_num=atomic_num
+        self.atomic_weight=atomic_weight
         self.element=element
         self.atom_type=atom_type
         self.atom_charge=atom_charge
@@ -441,11 +439,9 @@ def save_atom(mol_ff,Atom_file):
 
                 vdw_r=float(line.split()[6])
                 vdw_e=float(line.split()[7])
-                at_mass=float(line.split()[8])
 
                 mol_ff.atoms[at_idx].lj_R=vdw_r
                 mol_ff.atoms[at_idx].lj_E=vdw_e
-                mol_ff.atoms[at_idx].mass=at_mass
 
     return mol_ff
 
@@ -508,7 +504,7 @@ def save_dihed(mol_ff,Dihed_file):
 
                 frc_val=float(line.split()[-5])
                 period_val=int(line.split()[-4].split('.')[0])
-                phase_val=int(line.split()[-3].split('.')[0])
+                phase_val=round(float(line.split()[-3]),1)
     
                 if line.split()[0]=='I':
                     improp=True
@@ -551,6 +547,61 @@ def write_rd_pdb(mol_ff,rd_mol,residue_name,output_file):
     with open(output_file,'w') as f:
         for line in pdb_data: 
             f.write(line)
+
+def norm_len(atom_char):
+        if len(atom_char)>1:
+                return str(atom_char)
+        elif len(atom_char)==1:
+                return str(atom_char+' ')
+
+def write_frcmod(file_name,types,bonds,angles,dihedrals):
+    with open(file_name,'w') as f:
+        f.write('missing\n')
+        f.write('MASS\n')
+        if types is not None:
+            for i in range(0,len(types)):
+                line=('%s    %6s\n' % (norm_len(types[i].atom_type),float(types[i].atomic_weight)))
+                f.write(line)
+
+        f.write('\n')
+        f.write('BOND\n')
+        if bonds is not None:
+            for i in range(0,len(bonds)):
+                line=('%s-%s    %s    %s\n' % (norm_len(bonds[i].atom1.atom_type),norm_len(bonds[i].atom2.atom_type),bonds[i].frc,bonds[i].length))
+                f.write(line)
+
+        f.write('\n')
+        f.write('ANGLE\n')
+        if angles is not None:
+            for i in range(0,len(angles)):
+                line=('%s-%s-%s    %s    %s\n' % (norm_len(angles[i].atom1.atom_type),norm_len(angles[i].atom2.atom_type),norm_len(angles[i].atom3.atom_type),angles[i].frc,angles[i].ref_angle))
+                f.write(line)
+
+        f.write('\n')
+        f.write('DIHE\n')
+        if dihedrals is not None:
+            for i in range(0,len(dihedrals)):
+                if dihedrals[i].improper==False:
+                    for term in range(0,dihedrals[i].n_terms):
+                        line=('%s-%s-%s-%s    1     %-6s %10s  %6s\n' % (norm_len(dihedrals[i].atom1.atom_type),norm_len(dihedrals[i].atom2.atom_type),norm_len(dihedrals[i].atom3.atom_type),norm_len(dihedrals[i].atom4.atom_type),float(dihedrals[i].frc[term]),float(dihedrals[i].phase[term]),float(dihedrals[i].period[term])))
+                        f.write(line)
+
+        f.write('\n')
+        f.write('IMPROPER\n')
+        if dihedrals is not None:
+            for i in range(0,len(dihedrals)):
+                if dihedrals[i].improper==True:
+                    for term in range(0,dihedrals[i].n_terms):
+                        line=('%s-%s-%s-%s    %6s %10s  %6s\n' % (norm_len(dihedrals[i].atom1.atom_type),norm_len(dihedrals[i].atom2.atom_type),norm_len(dihedrals[i].atom3.atom_type),norm_len(dihedrals[i].atom4.atom_type),float(dihedrals[i].frc[term]),float(dihedrals[i].phase[term]),float(dihedrals[i].period[term])))
+                        f.write(line)
+
+        f.write('\n')
+        f.write('NONB\n')
+        if types is not None:
+            for i in range(0,len(types)):
+                line=('%s    %-6s    %-6s\n' % (norm_len(types[i].atom_type),float(types[i].lj_R),float(types[i].lj_E)))
+                f.write(line)
+        f.write('\n')
 
 ##############################################################################
 
