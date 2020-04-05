@@ -177,7 +177,7 @@ class Molecule_ff():
         self._atoms=[self._atoms[i] for i in new_order]
 
 class Atom_ff(object):
-    def __init__(self,idx,name=None,atomic_num=None,atomic_weight=None,element=None,atom_type=None,atom_charge=None,lj_R=None,lj_E=None,hybrid=None,bond_count=None,x=None,y=None,z=None,ti_core=None):
+    def __init__(self,idx,name=None,atomic_num=None,atomic_weight=None,element=None,atom_type=None,atom_charge=None,lj_R=None,lj_E=None,hybrid=None,bond_count=None,x=None,y=None,z=None,ti_core=False):
         self.idx=idx
         self.atomic_num=atomic_num
         self.atomic_weight=atomic_weight

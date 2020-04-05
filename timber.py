@@ -217,9 +217,9 @@ def update_ti_atoms(mol_list,off_list):
 
         for i in range(0,len(mol.GetAtoms())):
             if i in write_core:
-                mol_amber.atoms[i].core=True
+                mol_amber.atoms[i].ti_core=True
             elif i in write_last:
-                mol_amber.atoms[i].core=False
+                mol_amber.atoms[i].ti_core=False
 
         for i in write_core:
             new_atom_name=periodic[str(mol_amber.atoms[i].atomic_num)]+str(ele_count[int(mol_amber.atoms[i].atomic_num)])
@@ -227,7 +227,7 @@ def update_ti_atoms(mol_list,off_list):
             ele_count[int(mol_amber.atoms[i].atomic_num)]+=1
 
         for i in range(0,len(mol.GetAtoms())):
-            if mol_amber.atoms[i].core==False:
+            if mol_amber.atoms[i].ti_core==False:
                 new_atom_name=periodic[str(mol_amber.atoms[i].atomic_num)]+str(ele_count[int(mol_amber.atoms[i].atomic_num)])
                 mol_amber.atoms[i].name=new_atom_name
                 ele_count[int(mol_amber.atoms[i].atomic_num)]+=1
@@ -247,7 +247,7 @@ def update_ti_atoms(mol_list,off_list):
 def write_ti_strings(off_list,output_file):
     ti_region1=[]
     for atom in off_list[0].atoms:
-        if not atom.core:
+        if not atom.ti_core:
             ti_region1.append(atom.name)
 
     ti_str1=''
@@ -256,7 +256,7 @@ def write_ti_strings(off_list,output_file):
 
     ti_region2=[]
     for atom in off_list[1].atoms:
-        if not atom.core:
+        if not atom.ti_core:
             ti_region2.append(atom.name)
 
     ti_str2=''
