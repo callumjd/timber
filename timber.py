@@ -22,12 +22,6 @@ from ligprep_tools import *
 
 ###############################################################################
 
-def check_file(file_in):
-    output=False
-    if os.path.exists(file_in) and os.path.getsize(file_in)>0:
-        output=True
-    return output
-
 def mapping_tuples(csv_file):
     map_list=[]
 
@@ -396,20 +390,33 @@ if __name__=='__main__':
                 # return re-ordered [mol1,mol2] and [off1,off2]
                 refit_mols,refit_offs=update_ti_atoms(parm_mols,list(parm_off))
 
+                # LIG
                 os.chdir(dir_1_name)
                 write_rd_pdb(refit_offs[0],refit_mols[0],refit_offs[0].name,'LIG.pdb')
                 make_off(refit_offs[0],'make_off.leap')
                 os.system('tleap -f make_off.leap>out')
                 os.system('rm out make_off.leap')
+
+                writer=SDWriter('LIG.sdf')
+                writer.write(refit_mols[0])
+                writer.flush()
+
                 os.chdir('../')
 
+                # MOD
                 os.chdir(dir_2_name)
                 write_rd_pdb(refit_offs[1],refit_mols[1],refit_offs[1].name,'MOD.pdb')
                 make_off(refit_offs[1],'make_off.leap')
                 os.system('tleap -f make_off.leap>out')
                 os.system('rm out make_off.leap')
+
+                writer=SDWriter('MOD.sdf')
+                writer.write(refit_mols[1])
+                writer.flush()
+
                 os.chdir('../')
-        
+       
+                # TI masks
                 write_ti_strings(refit_offs,'TI_MASKS.dat')
 
     ## Exit pair directory

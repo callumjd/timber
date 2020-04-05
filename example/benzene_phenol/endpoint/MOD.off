@@ -1,0 +1,112 @@
+!!index array str
+ "MOD"
+!entry.MOD.unit.atoms table  str name  str type  int typex  int resx  int flags  int seq  int elmnt  dbl chg
+ "C1" "ca" 0 1 131072 1 6 -0.094500
+ "C2" "ca" 0 1 131072 2 6 -0.185000
+ "C3" "ca" 0 1 131072 3 6 -0.166000
+ "C4" "ca" 0 1 131072 4 6 0.123100
+ "C5" "ca" 0 1 131072 5 6 -0.094500
+ "C6" "ca" 0 1 131072 6 6 -0.185000
+ "H1" "ha" 0 1 131072 7 1 0.133000
+ "H2" "ha" 0 1 131072 8 1 0.141500
+ "H3" "ha" 0 1 131072 9 1 0.133000
+ "H4" "ha" 0 1 131072 10 1 0.133000
+ "H5" "ha" 0 1 131072 11 1 0.141500
+ "O1" "oh" 0 1 131072 12 8 -0.499100
+ "H6" "ho" 0 1 131072 13 1 0.418000
+!entry.MOD.unit.atomspertinfo table  str pname  str ptype  int ptypex  int pelmnt  dbl pchg
+ "C1" "ca" 0 -1 0.0
+ "C2" "ca" 0 -1 0.0
+ "C3" "ca" 0 -1 0.0
+ "C4" "ca" 0 -1 0.0
+ "C5" "ca" 0 -1 0.0
+ "C6" "ca" 0 -1 0.0
+ "H1" "ha" 0 -1 0.0
+ "H2" "ha" 0 -1 0.0
+ "H3" "ha" 0 -1 0.0
+ "H4" "ha" 0 -1 0.0
+ "H5" "ha" 0 -1 0.0
+ "O1" "oh" 0 -1 0.0
+ "H6" "ho" 0 -1 0.0
+!entry.MOD.unit.boundbox array dbl
+ -1.000000
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+!entry.MOD.unit.childsequence single int
+ 2
+!entry.MOD.unit.connect array int
+ 0
+ 0
+!entry.MOD.unit.connectivity table  int atom1x  int atom2x  int flags
+ 1 2 1
+ 1 3 1
+ 1 7 1
+ 2 4 1
+ 2 8 1
+ 3 5 1
+ 3 9 1
+ 4 6 1
+ 4 12 1
+ 5 6 1
+ 5 10 1
+ 6 11 1
+ 12 13 1
+!entry.MOD.unit.hierarchy table  str abovetype  int abovex  str belowtype  int belowx
+ "U" 0 "R" 1
+ "R" 1 "A" 1
+ "R" 1 "A" 2
+ "R" 1 "A" 3
+ "R" 1 "A" 4
+ "R" 1 "A" 5
+ "R" 1 "A" 6
+ "R" 1 "A" 7
+ "R" 1 "A" 8
+ "R" 1 "A" 9
+ "R" 1 "A" 10
+ "R" 1 "A" 11
+ "R" 1 "A" 12
+ "R" 1 "A" 13
+!entry.MOD.unit.name single str
+ "default_name"
+!entry.MOD.unit.positions table  dbl x  dbl y  dbl z
+ 25.978000 5.327000 4.779000
+ 26.395000 5.074000 3.499000
+ 26.498000 6.379000 5.469000
+ 27.340000 5.860000 2.902000
+ 27.420000 7.196000 4.856000
+ 27.837000 6.921000 3.569000
+ 25.237000 4.692000 5.241000
+ 25.972000 4.243000 2.955000
+ 26.190000 6.570000 6.486000
+ 27.817000 8.052000 5.381000
+ 28.566000 7.560000 3.093000
+ 27.797000 5.560000 1.583000
+ 28.461000 6.161000 1.237000
+!entry.MOD.unit.residueconnect table  int c1x  int c2x  int c3x  int c4x  int c5x  int c6x
+ 0 0 0 0 0 0
+!entry.MOD.unit.residues table  str name  int seq  int childseq  int startatomx  str restype  int imagingx
+ "MOD" 1 14 1 "?" 0
+!entry.MOD.unit.residuesPdbSequenceNumber array int
+ 1
+!entry.MOD.unit.solventcap array dbl
+ -1.000000
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+!entry.MOD.unit.velocities table  dbl x  dbl y  dbl z
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
+ 0.0 0.0 0.0
