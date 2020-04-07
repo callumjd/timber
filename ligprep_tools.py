@@ -57,6 +57,16 @@ class Molecule_ff():
         if dihedral not in self._dihedrals:
             self._dihedrals.append(dihedral)
 
+    def query_atom_name(self,at_name):
+
+        atom_out=None
+        for atom in self._atoms:
+            if atom.name==at_name:
+                atom_out=atom
+                break
+
+        return atom_out
+
     def query_atom_type(self,type1):
 
         atom_out=None
@@ -279,12 +289,13 @@ def Info_Mol2(mol2_file,mol_ff,n_atoms,fields=None):
                 atom_type=line.split()[5]
                 atom_charge=line.split()[8]
 
-                if 'name' in fields:
-                    mol_ff.atoms[counter-start].name=name
-                if 'type' in fields:
-                    mol_ff.atoms[counter-start].atom_type=atom_type
-                if 'charge' in fields:
-                    mol_ff.atoms[counter-start].atom_charge=atom_charge
+                if fields is not None:
+                    if 'name' in fields:
+                        mol_ff.atoms[counter-start].name=name
+                    if 'type' in fields:
+                        mol_ff.atoms[counter-start].atom_type=atom_type
+                    if 'charge' in fields:
+                        mol_ff.atoms[counter-start].atom_charge=atom_charge
             counter+=1
 
     return mol_ff
@@ -306,12 +317,13 @@ def Info_OFF(off_file,mol_ff,n_atoms,fields=None):
                 atom_type=line.split()[1].strip('"')
                 atom_charge=float(line.split()[7])
 
-                if 'name' in fields:
-                    mol_ff.atoms[counter-start].name=name
-                if 'type' in fields:
-                    mol_ff.atoms[counter-start].atom_type=atom_type
-                if 'charge' in fields:
-                    mol_ff.atoms[counter-start].atom_charge=atom_charge
+                if fields is not None:
+                    if 'name' in fields:
+                        mol_ff.atoms[counter-start].name=name
+                    if 'type' in fields:
+                        mol_ff.atoms[counter-start].atom_type=atom_type
+                    if 'charge' in fields:
+                        mol_ff.atoms[counter-start].atom_charge=atom_charge
             counter+=1
 
     return mol_ff
@@ -612,19 +624,25 @@ def run_antechamber(input_file,residue_name,ff,net_charge=None,clean_sdf=False):
         os.system('antechamber -i %s.mol2 -fi mol2 -o %s.sdf -fo sdf -s 0 -pf y' % (residue_name,residue_name))
 
 # write file to build amber prmtop
-def build_parm(residue_name,ff,file_name,prmtop_name=None):
-    if ff in ['gaff','gaff2','num']:
-        with open(file_name,'w') as f:
+def build_parm(residue_name,ff,file_name,prmtop_name=None,frcmod_file=None):
+
+    with open(file_name,'w') as f:
+        if ff in ['gaff','gaff2','num']:
             f.write('source leaprc.%s\n' % (ff))
-            if ff in ['gaff','gaff2']:
-                f.write('loadamberparams missing_gaff.frcmod\n')
-            f.write('loadoff %s.off\n' % (residue_name))
-            f.write('mol=loadpdb %s.pdb\n' % (residue_name))
-            if prmtop_name is not None:
-                f.write('saveamberparm mol %s.prmtop inpcrd\n' % (prmtop_name))
-            else:
-                f.write('saveamberparm mol prmtop inpcrd\n')
-            f.write('quit\n')
+        else:
+            f.write('source leaprc.protein.ff14SB\n')
+        if frcmod_file is not None:
+            if type(frcmod_file)==str:
+                frcmod_file=[frcmod_file]
+            for frc_file in frcmod_file:
+                f.write('loadamberparams %s\n' % (frc_file))
+        f.write('loadoff %s.off\n' % (residue_name))
+        f.write('mol=loadpdb %s.pdb\n' % (residue_name))
+        if prmtop_name is not None:
+            f.write('saveamberparm mol %s.prmtop inpcrd\n' % (prmtop_name))
+        else:
+            f.write('saveamberparm mol prmtop inpcrd\n')
+        f.write('quit\n')
 
 # parmed info
 def get_info(file_name,which):
@@ -669,12 +687,13 @@ def save_atom(mol_ff,Atom_file,fields=None):
                 if mol_ff.atoms[at_idx].atomic_num is None:
                     mol_ff.atoms[at_idx].atomic_num=atomic_num
 
-                if 'name' in fields:
-                    mol_ff.atoms[at_idx].name=name
-                if 'type' in fields:
-                    mol_ff.atoms[at_idx].atom_type=atom_type
-                if 'charge' in fields:
-                    mol_ff.atoms[at_idx].atom_charge=atom_charge
+                if fields is not None:
+                    if 'name' in fields:
+                        mol_ff.atoms[at_idx].name=name
+                    if 'type' in fields:
+                        mol_ff.atoms[at_idx].atom_type=atom_type
+                    if 'charge' in fields:
+                        mol_ff.atoms[at_idx].atom_charge=atom_charge
 
     return mol_ff
 
