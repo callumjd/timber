@@ -231,8 +231,10 @@ class Dihedral_ff(object):
         self.atom2=atom2
         self.atom3=atom3
         self.atom4=atom4
-        self.n_terms=n_terms
         self.improper=improper
+
+        if n_terms is not None:
+            self._n_terms=n_terms
 
         if frc is not None:
             self._frc=list(frc)
@@ -261,6 +263,14 @@ class Dihedral_ff(object):
     def phase(self):
         return self._phase
 
+    @property
+    def n_terms(self):
+        return self._n_terms
+
+    @n_terms.setter
+    def n_terms(self,value):
+        self._n_terms=value
+
     def set_negative_period(self):
         for i in range(0,len(self._period)):
             if self._period[i]>min(self._period):
@@ -271,6 +281,27 @@ class Dihedral_ff(object):
         self._period=list(self._period)
         self._frc=list(self._frc)
         self._phase=list(self._phase)
+
+    def update_dihed_frc(self,frc_vals):
+        assert len(frc_vals)==self._n_terms
+        for i in range(0,len(frc_vals)):
+            self._frc[i]=frc_vals[i]
+
+    def update_dihed_period(self,period_vals):
+        assert len(period_vals)==self._n_terms
+        for i in range(0,len(period_vals)):
+            self._period[i]=period_vals[i]
+
+    def update_dihed_phase(self,phase_vals):
+        assert len(phase_vals)==self._n_terms
+        for i in range(0,len(phase_vals)):
+            self._phase[i]=phase_vals[i]
+
+    def zero_dihed(self,torIdx):
+        self._period=[-5,-4,-3,-2,1]
+        self._frc=[0,0,0,0,0]
+        self._phase=[0,0,0,0,0]
+        self._n_terms=5
 
 def Info_Mol2(mol2_file,mol_ff,n_atoms,fields=None):
 
@@ -455,8 +486,9 @@ def unique_tor(torsionList,mol,mol_ff):
     exist_id=[]
     for torsion in torsionList:
         if check_torsion(mol,torsion):
-            exist_add=str('%s-%s-%s-%s' % (mol_ff.atoms[torsion[0]].atom_type,mol_ff.atoms[torsion[1]].atom_type,mol_ff.atoms[torsion[2]].atom_type,mol_ff.atoms[torsion[3]].atom_type))
-            reverse_add=str('%s-%s-%s-%s' % (mol_ff.atoms[torsion[3]].atom_type,mol_ff.atoms[torsion[2]].atom_type,mol_ff.atoms[torsion[1]].atom_type,mol_ff.atoms[torsion[0]].atom_type))
+            exist_add=(mol_ff.atoms[torsion[0]].atom_type,mol_ff.atoms[torsion[1]].atom_type,mol_ff.atoms[torsion[2]].atom_type,mol_ff.atoms[torsion[3]].atom_type)
+            reverse_add=(mol_ff.atoms[torsion[3]].atom_type,mol_ff.atoms[torsion[2]].atom_type,mol_ff.atoms[torsion[1]].atom_type,mol_ff.atoms[torsion[0]].atom_type)
+
             if (exist_add not in exist_tor) and (reverse_add not in exist_tor):
                 exist_tor.append(exist_add)
                 exist_id.append(torsion)
@@ -508,7 +540,7 @@ def check_torsion(mol,torsion):
             else:
                 result=True
 
-        return result
+    return result
 
 def fix_duplicate(tor_list,mol):
     central_sort=[]
@@ -517,11 +549,11 @@ def fix_duplicate(tor_list,mol):
 
     # central idx and tor mass
     for tor in tor_list:
-        central_sort.append(sorted([tor.split('-')[1],tor.split('-')[2]],key=int))
-        a=int(tor.split('-')[0])
-        b=int(tor.split('-')[1])
-        c=int(tor.split('-')[2])
-        d=int(tor.split('-')[3])
+        central_sort.append(sorted([tor[1],tor[2]],key=int))
+        a=tor[0]
+        b=tor[1]
+        c=tor[2]
+        d=tor[3]
 
         a_num=mol.GetAtomWithIdx(a-1).GetMass()
         b_num=mol.GetAtomWithIdx(b-1).GetMass()
@@ -645,10 +677,13 @@ def build_parm(residue_name,ff,file_name,prmtop_name=None,frcmod_file=None):
         f.write('quit\n')
 
 # parmed info
-def get_info(file_name,which):
+def get_info(file_name,which,prmtop=None):
 
     with open(file_name,'w') as f:
-        f.write('parm prmtop\n')
+        if prmtop is not None:
+            f.write('parm %s\n' % (prmtop))
+        else:
+            f.write('parm prmtop\n')
         f.write('print%s *\n' % (which))
         f.write('quit\n')
 
