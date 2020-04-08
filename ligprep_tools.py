@@ -263,7 +263,7 @@ class Dihedral_ff(object):
 
     def set_negative_period(self):
         for i in range(0,len(self._period)):
-            if self._period[i]>1:
+            if self._period[i]>min(self._period):
                 self._period[i]=int(-1*abs(self._period[i]))
 
     def sort_dihed(self):
