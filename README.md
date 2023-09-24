@@ -1,4 +1,4 @@
 TIMBER: prepare, run and analyse Amber TI free energy
 
-# under construction #
+[ under construction ]
 
