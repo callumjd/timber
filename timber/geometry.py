@@ -1,7 +1,5 @@
 # timber
 
-import os
-import sys
 import math
 import numpy as np
 
@@ -59,61 +57,4 @@ def get_dihedral(point1,point2,point3,point4):
     x = np.dot(v, w)
     y = np.dot(np.cross(b1, v), w)
     return np.degrees(np.arctan2(y, x))
-
-# center of mass of rdkit ligand
-def ligand_com(mol):
-
-    com_result=Coord(0.000,   0.000,  0.000)
-
-    ligand_weight=0.0
-    for i in range(0,len(mol.GetAtoms())):
-        weight=float(Chem.GetPeriodicTable().GetAtomicWeight(mol.GetAtoms()[i].GetAtomicNum()))
-        ligand_weight+=weight
-
-    for i in range(0,len(mol.GetAtoms())):
-        pos=mol.GetConformer().GetAtomPosition(i)
-        weight=float(Chem.GetPeriodicTable().GetAtomicWeight(mol.GetAtoms()[i].GetAtomicNum()))
-
-        com_result.x+=(pos.x * weight)
-        com_result.y+=(pos.y * weight)
-        com_result.z+=(pos.z * weight)
-
-    com_result.x=com_result.x/ligand_weight
-    com_result.y=com_result.y/ligand_weight
-    com_result.z=com_result.z/ligand_weight
-
-    return com_result
-
-## closest to anchor ##
-def rank_closest(anchor,point_list):
-
-    dist_val=[]
-    for point in point_list:
-        dist_val.append(cart_distance(anchor,point))
-
-    return int(dist_val.index(min(dist_val)))
-
-## further from anchor ##
-def rank_further(anchor,point_list):
-
-    dist_val=[]
-    for point in point_list:
-        dist_val.append(cart_distance(anchor,point))
-
-    return int(dist_val.index(max(dist_val)))
-
-## centroid of points ##
-def find_centroid(coord_list):
-    assert isinstance(coord_list,list)
-
-    x_tot=0.0
-    y_tot=0.0
-    z_tot=0.0
-
-    for point in coord_list:
-        x_tot=x_tot+point.x
-        y_tot=y_tot+point.y
-        z_tot=z_tot+point.z
-
-    return Coord(x_tot/float(len(coord_list)),y_tot/float(len(coord_list)),z_tot/float(len(coord_list)))
 

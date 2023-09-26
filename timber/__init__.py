@@ -2,8 +2,9 @@
 timber
 '''
 
-__all__ = ['energy','geometry','ligprep_tools','molecule_ff']
+__all__ = ['align','energy','geometry','ligprep_tools','molecule_ff']
 
+from .align import *
 from .energy import *
 from .geometry import *
 from .ligprep_tools import *

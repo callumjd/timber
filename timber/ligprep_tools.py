@@ -1,8 +1,6 @@
 # timber
 
 import os
-import sys
-import math
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -53,8 +51,12 @@ def run_antechamber(input_file,residue_name='UNL',ff='gaff2',net_charge=None):
         os.system('antechamber -i %s -fi %s -o %s.mol2 -fo mol2 -rn %s -at %s -s 0 -pf y -dr no' % (input_file,file_format,residue_name,residue_name,ff))
     else:
         os.system('antechamber -i %s -fi %s -o %s.mol2 -fo mol2 -rn %s -nc %d -c bcc -at %s -s 0 -pf y -dr no' % (input_file,file_format,residue_name,residue_name,net_charge,ff))
+        os.system('rm sqm.in sqm.out sqm.pdb')
 
     os.system('parmchk2 -i %s.mol2 -f mol2 -o missing_%s.frcmod -s %s' % (residue_name,ff,ff))
+
+    # clean SDF file for rdkit
+    os.system('antechamber -i %s.mol2 -fi mol2 -o %s.sdf -fo sdf -s 0 -pf y -dr no' % (residue_name,residue_name))
 
 # write file to build amber prmtop
 def build_parm(residue_name='UNL',ff='gaff2',file_name='make_lig.leap',prmtop_name=None,frcmod_file=None):

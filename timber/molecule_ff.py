@@ -1,11 +1,8 @@
 # timber
 
-import os
-import sys
 import numpy as np
 from rdkit import Chem
-from rdkit.Chem import AllChem
-from rdkit.Chem import rdMolTransforms,rdmolops
+from rdkit.Chem import AllChem,rdMolTransforms,rdmolops
 import parmed as pmd
 from .ligprep_tools import check_file
 from .geometry import Coord
@@ -457,6 +454,17 @@ def add_rd_torsions(rd_mol,mol_ff):
             if (tor[3],tor[2],tor[1],tor[0]) not in unique_torsions:
                 unique_torsions.append((tor[3],tor[2],tor[1],tor[0]))
                 mol_ff.add_dihedral(Dihedral_ff(mol_ff.atoms[tor[3]],mol_ff.atoms[tor[2]],mol_ff.atoms[tor[1]],mol_ff.atoms[tor[0]]))
+
+    return mol_ff
+
+def get_rdkit_info(rd_mol,mol_ff):
+
+    for at in rd_mol.GetAtoms():
+        pos=rd_mol.GetConformer().GetAtomPosition(at.GetIdx())
+        mol_ff.add_atom(Atom_ff(idx=at.GetIdx(),atomic_num=at.GetAtomicNum(),atomic_weight=Chem.GetPeriodicTable().GetAtomicWeight(at.GetAtomicNum()),x=pos.x,y=pos.y,z=pos.z))
+    mol_ff=add_rd_bonds(rd_mol,mol_ff)
+    mol_ff=add_rd_angles(rd_mol,mol_ff)
+    mol_ff=add_rd_torsions(rd_mol,mol_ff)
 
     return mol_ff
 
