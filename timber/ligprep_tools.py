@@ -99,11 +99,11 @@ def Info_Mol2(mol2_file,mol_ff,n_atoms,fields=None):
 
                 if fields is not None:
                     if 'name' in fields:
-                        mol_ff.atoms[counter-start].name=name
+                        mol_ff.atoms[counter-start].name=str(name)
                     if 'type' in fields:
-                        mol_ff.atoms[counter-start].atom_type=atom_type
+                        mol_ff.atoms[counter-start].atom_type=str(atom_type)
                     if 'charge' in fields:
-                        mol_ff.atoms[counter-start].atom_charge=atom_charge
+                        mol_ff.atoms[counter-start].atom_charge=float(atom_charge)
             counter+=1
 
     return mol_ff
@@ -128,11 +128,11 @@ def Info_OFF(off_file,mol_ff,n_atoms,fields=None):
 
                 if fields is not None:
                     if 'name' in fields:
-                        mol_ff.atoms[counter-start].name=name
+                        mol_ff.atoms[counter-start].name=str(name)
                     if 'type' in fields:
-                        mol_ff.atoms[counter-start].atom_type=atom_type
+                        mol_ff.atoms[counter-start].atom_type=str(atom_type)
                     if 'charge' in fields:
-                        mol_ff.atoms[counter-start].atom_charge=atom_charge
+                        mol_ff.atoms[counter-start].atom_charge=float(atom_charge)
             counter+=1
 
     return mol_ff

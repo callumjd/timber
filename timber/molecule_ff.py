@@ -461,7 +461,7 @@ def get_rdkit_info(rd_mol,mol_ff):
 
     for at in rd_mol.GetAtoms():
         pos=rd_mol.GetConformer().GetAtomPosition(at.GetIdx())
-        mol_ff.add_atom(Atom_ff(idx=at.GetIdx(),atomic_num=at.GetAtomicNum(),atomic_weight=Chem.GetPeriodicTable().GetAtomicWeight(at.GetAtomicNum()),x=pos.x,y=pos.y,z=pos.z))
+        mol_ff.add_atom(Atom_ff(idx=int(at.GetIdx()),atomic_num=int(at.GetAtomicNum()),atomic_weight=float(Chem.GetPeriodicTable().GetAtomicWeight(at.GetAtomicNum())),hybrid=at.GetHybridization(),bond_count=len(at.GetBonds()),x=float(pos.x),y=float(pos.y),z=float(pos.z)))
     mol_ff=add_rd_bonds(rd_mol,mol_ff)
     mol_ff=add_rd_angles(rd_mol,mol_ff)
     mol_ff=add_rd_torsions(rd_mol,mol_ff)

@@ -68,21 +68,6 @@ def get_mcs(mol_list,seed=None,strict=False):
 
     return mcs
 
-def max_mcss(mol_in,mol_list,seed=None):
-
-    sma_mcss=[]
-    len_mcss=[]
-    for mol in mol_list:
-        res=get_mcs([mol_in,mol],seed=seed,strict=False)
-        sma_mcss.append(res)
-        len_mcss.append(res.numAtoms)
-
-    if len(len_mcss)>0:
-        max_idx=len_mcss.index(max(len_mcss)) 
-        return mol_list[max_idx],sma_mcss[max_idx]
-    else:
-        return mol_list[0],seed
-
 def rigid_coordinate_set(mol1,mol2,ene_cutoff=500,snap_tol=5):
 
     # zero energy
@@ -180,23 +165,4 @@ def rms_fit(mol1,mol2,mcss,mcss_exclusion=None,bak_seed=None,tolerance=1.0,ene_c
                 ff.MMFFAddPositionConstraint(idx, 0.0, 1.e2)
 
         ff.Minimize(maxIts=10000, forceTol=0.1)
-
-def coord_min(mol_list,mcss):
-
-    for m in mol_list:
-        if m.HasSubstructMatch(AllChem.MolFromSmarts(mcss)):
-            freeze=m.GetSubstructMatches(AllChem.MolFromSmarts(mcss))[0]
-
-            mp = rdForceFieldHelpers.MMFFGetMoleculeProperties(m)
-            ff = rdForceFieldHelpers.MMFFGetMoleculeForceField(m, mp)
-
-            if ff:
-                for i in range(0,len(m.GetAtoms())):
-                    if i not in freeze:
-                        if int(m.GetAtomWithIdx(i).GetAtomicNum())!=1:
-                            ff.MMFFAddPositionConstraint(i, 0.0, 1)
-                    else:
-                        ff.MMFFAddPositionConstraint(i, 0.0, 1.e6)
-
-                ff.Minimize(maxIts=10000, forceTol=0.1)
 
