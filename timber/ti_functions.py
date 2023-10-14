@@ -1,10 +1,14 @@
 # timber
 
+import os
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdmolops
-from .molecule_ff import Molecule_ff,add_rd_bonds
+from rdkit.Chem import SDWriter
+from .molecule_ff import Molecule_ff,add_rd_bonds,get_rdkit_info
 from .geometry import cart_distance
+from .align import get_mcs,rms_fit,rigid_coordinate_set
+from .ligprep_tools import run_antechamber,Info_Mol2,write_rd_pdb,make_off
 
 ##############################################################################
 
@@ -163,4 +167,118 @@ def write_ti_strings(off_list,output_file):
     with open(output_file,'w') as f:
         f.write('%s\n' % (ti_str1))
         f.write('%s\n' % (ti_str2))
+
+def run_rbfe_setup(rd_mol1,rd_mol2,dir_1_name='core',dir_2_name='sec_lig',full_mcs=None,align=False):
+
+    if not rd_mol1:
+        raise Exception('Error: null mol')
+    if not rd_mol2:
+        raise Exception('Error: null mol')
+
+    name1=rd_mol1.GetProp('_Name')
+    name2=rd_mol2.GetProp('_Name')
+
+    pair_dir=name1+'~'+name2
+    if not os.path.exists(pair_dir):
+        os.mkdir(pair_dir)
+        os.chdir(pair_dir)
+    else:
+        raise Exception('Error: directory %s exists!' % (pair_dir))
+
+    # Preparing name1 -> name2
+    print('%s -> %s \n' % (name1,name2))
+
+    os.mkdir(dir_1_name)
+    os.mkdir(dir_2_name)
+
+    # run align if align=True - we expect "full_mcs" to be a smarts string
+    local_mcs=get_mcs([Chem.RemoveHs(rd_mol1),Chem.RemoveHs(rd_mol2)],strict=False)
+    if align and full_mcs:
+        # align lig2 to lig1
+        rms_fit(rd_mol1,rd_mol2,mcss=local_mcs.smartsString,mcss_exclusion=full_mcs,bak_seed=full_mcs,tolerance=2.0,ene_cutoff=25)
+        rigid_coordinate_set(rd_mol1,rd_mol2,ene_cutoff=35,snap_tol=0.5)
+
+    # write files and create parameters
+    parm_mols=[]
+    parm_off=[]
+
+    # LIG lig1
+    os.chdir(dir_1_name)
+
+    writer=SDWriter('for_parm.sdf')
+    writer.write(rd_mol1)
+    writer.flush()
+
+    # IMPORTANT - must pass net_charge=Chem.molops.GetFormalCharge(rd_mol1) to get AM1-BCC
+    run_antechamber('for_parm.sdf',residue_name='UNL',ff='gaff2')
+
+    LIG=Molecule_ff(name='LIG')
+    mol=Chem.SDMolSupplier('UNL.sdf',removeHs=False,sanitize=False)[0]
+    mol=AllChem.AssignBondOrdersFromTemplate(rd_mol1,mol) # protect against poor SDF file ...
+    Chem.SanitizeMol(mol)
+    LIG=get_rdkit_info(mol,LIG)
+    LIG=Info_Mol2('UNL.mol2',LIG,len(mol.GetAtoms()),fields=['name','type','charge'])
+
+    parm_mols.append(Chem.Mol(mol))
+    parm_off.append(LIG)
+
+    os.chdir('../')
+
+    # MOD lig2
+    os.chdir(dir_2_name)
+
+    writer=SDWriter('for_parm.sdf')
+    writer.write(rd_mol2)
+    writer.flush()
+
+    run_antechamber('for_parm.sdf',residue_name='UNL',ff='gaff2')
+
+    MOD=Molecule_ff(name='MOD')
+    mol=Chem.SDMolSupplier('UNL.sdf',removeHs=False,sanitize=False)[0]
+    mol=AllChem.AssignBondOrdersFromTemplate(rd_mol2,mol) # protect against poor SDF file ...
+    Chem.SanitizeMol(mol)
+    MOD=get_rdkit_info(mol,MOD)
+    MOD=Info_Mol2('UNL.mol2',MOD,len(mol.GetAtoms()),fields=['name','type','charge'])
+
+    parm_mols.append(Chem.Mol(mol))
+    parm_off.append(MOD)
+
+    os.chdir('../')
+
+    # now compare lig1 + lig2, identify soft core atoms
+    # pass a new copy of the off objects since they get modified
+    # return re-ordered [mol1,mol2] and [off1,off2]
+    refit_mols,refit_offs=update_ti_atoms(parm_mols,list(parm_off),mcs=local_mcs.smartsString)
+
+    # LIG refit
+    os.chdir(dir_1_name)
+    write_rd_pdb(refit_offs[0],refit_mols[0],refit_offs[0].name,'LIG.pdb')
+    make_off(refit_offs[0],'make_off.leap')
+    os.system('tleap -f make_off.leap>out')
+    os.system('rm out make_off.leap')
+
+    writer=SDWriter('LIG.sdf')
+    writer.write(refit_mols[0])
+    writer.flush()
+
+    os.chdir('../')
+
+    # MOD refit
+    os.chdir(dir_2_name)
+    write_rd_pdb(refit_offs[1],refit_mols[1],refit_offs[1].name,'MOD.pdb')
+    make_off(refit_offs[1],'make_off.leap')
+    os.system('tleap -f make_off.leap>out')
+    os.system('rm out make_off.leap')
+
+    writer=SDWriter('MOD.sdf')
+    writer.write(refit_mols[1])
+    writer.flush()
+
+    os.chdir('../')
+
+    # TI masks
+    write_ti_strings(refit_offs,'TI_MASKS.dat')
+
+    # pair dir
+    os.chdir('../')
 
