@@ -2,15 +2,17 @@
 import os
 import sys
 import numpy as np
+import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem,SDWriter
 import timber
 
 ##############################################################################
 
-input_sdf='ptp1b_ligands.sdf'
-name1='lig_20667_2qbp'
-name2='lig_20669_2qbr'
+input_sdf='file.sdf'
+ff='gaff2'
+
+timber.run_lomap(input_sdf,dir_name='lomap_dir',output_name='mapping')
 
 # load molecules
 suppl=Chem.SDMolSupplier(input_sdf,removeHs=False)
@@ -28,5 +30,11 @@ for m in all_mols:
     if m.GetProp('_Name')!=all_names[0]:
         timber.rms_fit(all_mols[0],m,mcss=full_mcs.smartsString,mcss_exclusion=None,bak_seed=None,tolerance=2.0,ene_cutoff=500)
 
-timber.run_rbfe_setup(all_mols[all_names.index(name1)],all_mols[all_names.index(name2)],full_mcs=full_mcs.smartsString,align=False)
+df=pd.read_csv('mapping.csv')
+
+# prepare all dir lig1->lig2
+for index,row in df.iterrows():
+    name1=row['Name1']
+    name2=row['Name2']
+    timber.run_rbfe_setup(all_mols[all_names.index(name1)],all_mols[all_names.index(name2)],ff=ff,full_mcs=full_mcs.smartsString,align=True)
 

@@ -168,7 +168,7 @@ def write_ti_strings(off_list,output_file):
         f.write('%s\n' % (ti_str1))
         f.write('%s\n' % (ti_str2))
 
-def run_rbfe_setup(rd_mol1,rd_mol2,dir_1_name='core',dir_2_name='sec_lig',full_mcs=None,align=False):
+def run_rbfe_setup(rd_mol1,rd_mol2,ff='gaff2',dir_1_name='core',dir_2_name='sec_lig',full_mcs=None,align=False):
 
     if not rd_mol1:
         raise Exception('Error: null mol')
@@ -210,7 +210,7 @@ def run_rbfe_setup(rd_mol1,rd_mol2,dir_1_name='core',dir_2_name='sec_lig',full_m
     writer.flush()
 
     # IMPORTANT - must pass net_charge=Chem.molops.GetFormalCharge(rd_mol1) to get AM1-BCC
-    run_antechamber('for_parm.sdf',residue_name='UNL',ff='gaff2')
+    run_antechamber('for_parm.sdf',residue_name='UNL',ff=ff)
 
     LIG=Molecule_ff(name='LIG')
     mol=Chem.SDMolSupplier('UNL.sdf',removeHs=False,sanitize=False)[0]
@@ -231,7 +231,7 @@ def run_rbfe_setup(rd_mol1,rd_mol2,dir_1_name='core',dir_2_name='sec_lig',full_m
     writer.write(rd_mol2)
     writer.flush()
 
-    run_antechamber('for_parm.sdf',residue_name='UNL',ff='gaff2')
+    run_antechamber('for_parm.sdf',residue_name='UNL',ff=ff)
 
     MOD=Molecule_ff(name='MOD')
     mol=Chem.SDMolSupplier('UNL.sdf',removeHs=False,sanitize=False)[0]
