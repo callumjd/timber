@@ -1,0 +1,3 @@
+parm ptp1b_protein.pdb
+loadcrd ptp1b_protein.pdb name MyCrd
+prepareforleap crdset MyCrd name Final out leap.ptp1b_protein.in leapunitname m pdbout ptp1b_protein.cpptraj.pdb nowat noh keepaltloc highestocc

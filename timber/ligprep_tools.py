@@ -2,6 +2,7 @@
 
 import os
 import numpy as np
+import parmed as pmd
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -54,6 +55,10 @@ def run_antechamber(input_file,residue_name='UNL',ff='gaff2',net_charge=None):
         os.system('rm sqm.in sqm.out sqm.pdb')
 
     os.system('parmchk2 -i %s.mol2 -f mol2 -o missing_%s.frcmod -s %s' % (residue_name,ff,ff))
+
+    # leap will fail if file does not exist
+    if not check_file('missing_%s.frcmod' % (ff)):
+        os.system('missing_%s.frcmod' % (ff))
 
     # clean SDF file for rdkit
     os.system('antechamber -i %s.mol2 -fi mol2 -o %s.sdf -fo sdf -s 0 -pf y -dr no' % (residue_name,residue_name))
@@ -241,4 +246,15 @@ def update_mol_coords_pdb(rdmol,pdb_file):
                 lig_coords.append(Coord(x,y,z))
 
     return copy_mol,lig_coords
+
+# run hydrogen mass repartitioning
+def setup_hmass(prmtop):
+
+    os.system('mv %s nohmass.%s' % (prmtop,prmtop))    
+
+    my_prmtop=pmd.amber.AmberParm('nohmass.'+prmtop)
+
+    action=pmd.tools.HMassRepartition(my_prmtop)
+    action.execute()
+    my_prmtop.write_parm(prmtop)
 

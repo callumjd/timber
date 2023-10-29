@@ -1,6 +1,7 @@
 # timber
 
 import os
+import glob as glob
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdmolops
@@ -8,7 +9,8 @@ from rdkit.Chem import SDWriter
 from .molecule_ff import Molecule_ff,add_rd_bonds,get_rdkit_info
 from .geometry import cart_distance
 from .align import get_mcs,rms_fit,rigid_coordinate_set
-from .ligprep_tools import run_antechamber,Info_Mol2,write_rd_pdb,make_off
+from .ligprep_tools import run_antechamber,Info_Mol2,write_rd_pdb,make_off,check_file,setup_hmass
+from .ti_inputs import write_cluster_script,write_inputs
 
 ##############################################################################
 
@@ -168,6 +170,46 @@ def write_ti_strings(off_list,output_file):
         f.write('%s\n' % (ti_str1))
         f.write('%s\n' % (ti_str2))
 
+def run_abfe_setup(rd_mol1,ff='gaff2',dir_1_name='core'):
+
+    if not rd_mol1:
+        raise Exception('Error: null mol')
+
+    name1=rd_mol1.GetProp('_Name')
+
+    pair_dir=name1
+    if not os.path.exists(pair_dir):
+        os.mkdir(pair_dir)
+        os.chdir(pair_dir)
+    else:
+        raise Exception('Error: directory %s exists!' % (pair_dir))
+
+    # Preparing name1 -> name2
+    print('%s -> Nothing \n' % (name1))
+
+    os.mkdir(dir_1_name)
+    os.chdir(dir_1_name)
+
+    writer=SDWriter('for_parm.sdf')
+    writer.write(rd_mol1)
+    writer.flush()
+
+    # IMPORTANT - must pass net_charge=Chem.molops.GetFormalCharge(rd_mol1) to get AM1-BCC
+    run_antechamber('for_parm.sdf',residue_name='LIG',ff=ff)
+
+    LIG=Molecule_ff(name='LIG')
+    mol=Chem.SDMolSupplier('LIG.sdf',removeHs=False,sanitize=False)[0]
+    mol=AllChem.AssignBondOrdersFromTemplate(rd_mol1,mol) # protect against poor SDF file ...
+    Chem.SanitizeMol(mol)
+    LIG=get_rdkit_info(mol,LIG)
+    LIG=Info_Mol2('LIG.mol2',LIG,len(mol.GetAtoms()),fields=['name','type','charge'])
+    write_rd_pdb(LIG,mol,'LIG','LIG.pdb')
+    make_off(LIG,'make_off.leap')
+    os.system('tleap -f make_off.leap>out')
+    os.system('rm out make_off.leap')
+
+    os.chdir('../../')
+
 def run_rbfe_setup(rd_mol1,rd_mol2,ff='gaff2',dir_1_name='core',dir_2_name='sec_lig',full_mcs=None,align=False):
 
     if not rd_mol1:
@@ -192,11 +234,12 @@ def run_rbfe_setup(rd_mol1,rd_mol2,ff='gaff2',dir_1_name='core',dir_2_name='sec_
     os.mkdir(dir_2_name)
 
     # run align if align=True - we expect "full_mcs" to be a smarts string
+    # ene_cutoff and snap_tol may need to be adjusted - expose?
     local_mcs=get_mcs([Chem.RemoveHs(rd_mol1),Chem.RemoveHs(rd_mol2)],strict=False)
     if align and full_mcs:
         # align lig2 to lig1
-        rms_fit(rd_mol1,rd_mol2,mcss=local_mcs.smartsString,mcss_exclusion=full_mcs,bak_seed=full_mcs,tolerance=2.0,ene_cutoff=25)
-        rigid_coordinate_set(rd_mol1,rd_mol2,ene_cutoff=35,snap_tol=0.5)
+        rms_fit(rd_mol1,rd_mol2,mcss=local_mcs.smartsString,mcss_exclusion=full_mcs,bak_seed=full_mcs,tolerance=2.0,ene_cutoff=75)
+        rigid_coordinate_set(rd_mol1,rd_mol2,ene_cutoff=75,snap_tol=0.75)
 
     # write files and create parameters
     parm_mols=[]
@@ -282,3 +325,337 @@ def run_rbfe_setup(rd_mol1,rd_mol2,ff='gaff2',dir_1_name='core',dir_2_name='sec_
     # pair dir
     os.chdir('../')
 
+def check_leap_build(leap_output_file):
+    # TO DO: Update with better error checks
+    output=True
+    with open(leap_output_file,'r') as f:
+        data=f.readlines()
+
+    for line in data:
+        if 'Parameter file was not saved.' in line:
+            output=False
+            break
+        elif 'Fatal Error' in line:
+            output=False
+            break
+        elif 'Exiting LEaP: Errors' in line:
+            err_count=int(line.split()[4].strip(';'))
+            if err_count>0:
+                output=False
+                break
+
+    return output
+
+def run_build(df,hmass=True,use_openff=False):
+
+    # check if build.leap exists
+    if not check_file('build.leap'):
+        raise Exception('Error: build mode requires build.leap file\n')
+
+    # build all dir lig1->lig2
+    for index,row in df.iterrows():
+        name1=row['Name1']
+        # rbfe
+        if 'Name2' in list(df.columns):
+            name2=row['Name2']
+            pair_dir=name1+'~'+name2
+        # absolute
+        else:
+            pair_dir=name1
+
+        os.chdir(pair_dir)
+        os.mkdir('complex')
+        os.mkdir('solvent')
+
+        os.system('cp ../build.leap .')
+        os.system('tleap -f build.leap>leap_out')
+
+        if (check_file('complex/complex_ligands.prmtop') and check_file('solvent/solvent_ligands.prmtop') and check_leap_build('leap_out')):
+            print('System built: %s\n' % (pair_dir))
+            os.system('rm leap_out')
+        else:
+            raise Exception('Error: could not build system %s\n' % (pair_dir))
+
+        # first, do the openff setup
+        if use_openff:
+            pass
+
+        # prepare the hmass prmtop
+        for media in ['complex','solvent']:
+            os.chdir(media)
+            for prmtop in glob.glob('*prmtop'):
+                setup_hmass(prmtop)
+            os.chdir('../')
+
+        os.chdir('../')
+
+def build_leap(prot,prep_files=None,pdb_files=None,ff='gaff2',protocol='one-step',dir_1_name='core',dir_2_name='sec_lig'):
+
+    convert_prep={'off':'loadoff','lib':'loadoff','prep':'loadamberprep','frcmod':'loadamberparams','mol2':'loadmol2','zinc':'source','add':'loadamberparams'}
+
+    if not check_file(prot):
+        raise Exception('Error: cannot find %s\n' % (prot))
+
+    with open('build.leap','w') as f:
+        if ff=='openff':
+            f.write('source leaprc.protein.ff14SB\n')
+        else:
+            f.write('source leaprc.protein.ff19SB\n')
+        f.write('source leaprc.water.tip3p\n')
+        f.write('source leaprc.phosaa19SB\n')
+        # DNA force field
+        f.write('source leaprc.DNA.bsc1\n')
+        f.write('loadamberparams frcmod.ionsjc_tip3p\n')
+        # this is for MG ions etc
+        f.write('loadamberparams frcmod.ions234lm_126_tip3p\n')
+
+        if ff=='gaff' or ff=='openff':
+            f.write('source leaprc.gaff\n')
+            f.write('\n')
+            f.write('loadamberparams %s/missing_gaff.frcmod\n' % (dir_1_name))
+            if protocol not in ['absolute','absolute-three-step']:
+                f.write('loadamberparams %s/missing_gaff.frcmod\n' % (dir_2_name))
+        elif ff=='gaff2':
+            f.write('source leaprc.gaff2\n')
+            f.write('\n')
+            f.write('loadamberparams %s/missing_gaff2.frcmod\n' % (dir_1_name))
+            if protocol not in ['absolute','absolute-three-step']:
+                f.write('loadamberparams %s/missing_gaff2.frcmod\n' % (dir_2_name))
+
+        if prep_files and len(prep_files)>0:
+            for val in prep_files:
+                my_type=val.split('.')[-1]
+                f.write('%s %s\n' % (convert_prep[my_type],os.path.abspath(val)))
+
+        f.write('\n')
+        f.write('loadoff %s/LIG.off\n' % (dir_1_name))
+        if protocol not in ['absolute','absolute-three-step']:
+            f.write('loadoff %s/MOD.off\n' % (dir_2_name))
+        f.write('\n')
+        f.write('LIG=loadpdb %s/LIG.pdb\n' % (dir_1_name))
+        if protocol not in ['absolute','absolute-three-step']:
+            f.write('MOD=loadpdb %s/MOD.pdb\n' % (dir_2_name))
+        f.write('\n')
+        f.write('prot=loadpdb %s\n' % os.path.abspath(prot))
+
+        pdb_str=''
+        not_wat=''
+        if pdb_files:
+            for i in range(0,len(pdb_files)):
+                f.write('mol%d=loadpdb %s\n' % (i,os.path.abspath(pdb_files[i])))
+                pdb_str=pdb_str+'mol'+str(i)+' '
+                if not is_water(pdb_files[i]):
+                    not_wat=not_wat+'mol'+str(i)+' '
+
+        f.write('\n')
+
+        # initial units
+        if protocol in ['one-step','three-step']:
+            f.write('ligands = combine {LIG LIG MOD MOD}\n')
+        elif protocol in ['absolute','absolute-three-step']:
+            f.write('ligands = combine {LIG LIG}\n')
+
+        f.write('solvatebox ligands TIP3PBOX 20.0 0.75\n')
+        f.write('ligands_all=copy ligands\n')
+        f.write('\n')
+
+        if protocol in ['one-step','three-step']:
+            f.write('complex=combine {LIG LIG MOD MOD prot %s}\n' % (pdb_str))
+        elif protocol in ['absolute','absolute-three-step']:
+            f.write('complex=combine {LIG LIG prot %s}\n' % (pdb_str))
+
+        f.write('solvatebox complex TIP3PBOX 12.0 0.75\n')
+        f.write('complex_all=copy complex\n')
+        f.write('\n')
+
+        # LIGAND
+        # save base ligand prmtops
+        if protocol in ['one-step','three-step']:
+            f.write('remove ligands ligands.4\n')
+            f.write('remove ligands ligands.2\n')
+        elif protocol in ['absolute','absolute-three-step']:
+            f.write('remove ligands ligands.2\n')
+        f.write('addIonsRand ligands Na+ 0\n')
+        f.write('addIonsRand ligands Cl- 0\n')
+        f.write('savepdb ligands solvent/solvent_ligands.pdb\n')
+        f.write('saveamberparm ligands solvent/solvent_ligands.prmtop solvent/solvent_ligands.inpcrd\n')
+
+        if protocol=='three-step':
+            f.write('\n')
+            f.write('ligands=copy ligands_all\n')
+            f.write('remove ligands ligands.4\n')
+            f.write('remove ligands ligands.3\n')
+            f.write('addIonsRand ligands Na+ 0\n')
+            f.write('addIonsRand ligands Cl- 0\n')
+            f.write('savepdb ligands solvent/solvent_decharge.pdb\n')
+            f.write('saveamberparm ligands solvent/solvent_decharge.prmtop solvent/solvent_decharge.inpcrd\n')
+            f.write('\n')
+            f.write('ligands=copy ligands_all\n')
+            f.write('remove ligands ligands.2\n')
+            f.write('remove ligands ligands.1\n')
+            f.write('addIonsRand ligands Na+ 0\n')
+            f.write('addIonsRand ligands Cl- 0\n')
+            f.write('savepdb ligands solvent/solvent_recharge.pdb\n')
+            f.write('saveamberparm ligands solvent/solvent_recharge.prmtop solvent/solvent_recharge.inpcrd\n')
+
+        # absolute solvent does not require restraint leg
+        elif protocol=='absolute-three-step':
+            f.write('\n')
+            f.write('ligands=copy ligands_all\n')
+            f.write('addIonsRand ligands Na+ 0\n')
+            f.write('addIonsRand ligands Cl- 0\n')
+            f.write('savepdb ligands solvent/solvent_decharge.pdb\n')
+            f.write('saveamberparm ligands solvent/solvent_decharge.prmtop solvent/solvent_decharge.inpcrd\n')
+
+        f.write('\n')
+
+        # COMPLEX
+        # save base ligand prmtops
+        if protocol in ['one-step','three-step']:
+            f.write('remove complex complex.4\n')
+            f.write('remove complex complex.2\n')
+        elif protocol in ['absolute','absolute-three-step']:
+            f.write('remove complex complex.2\n')
+        f.write('addIonsRand complex Na+ 0\n')
+        f.write('addIonsRand complex Cl- 0\n')
+        f.write('savepdb complex complex/complex_ligands.pdb\n')
+        f.write('saveamberparm complex complex/complex_ligands.prmtop complex/complex_ligands.inpcrd\n')
+
+        if protocol=='three-step':
+            f.write('\n')
+            f.write('complex=copy complex_all\n')
+            f.write('remove complex complex.4\n')
+            f.write('remove complex complex.3\n')
+            f.write('addIonsRand complex Na+ 0\n')
+            f.write('addIonsRand complex Cl- 0\n')
+            f.write('savepdb complex complex/complex_decharge.pdb\n')
+            f.write('saveamberparm complex complex/complex_decharge.prmtop complex/complex_decharge.inpcrd\n')
+            f.write('\n')
+            f.write('complex=copy complex_all\n')
+            f.write('remove complex complex.2\n')
+            f.write('remove complex complex.1\n')
+            f.write('addIonsRand complex Na+ 0\n')
+            f.write('addIonsRand complex Cl- 0\n')
+            f.write('savepdb complex complex/complex_recharge.pdb\n')
+            f.write('saveamberparm complex complex/complex_recharge.prmtop complex/complex_recharge.inpcrd\n')
+
+        elif protocol in ['absolute','absolute-three-step']:
+            f.write('\n')
+            f.write('complex=copy complex_all\n')
+            f.write('addIonsRand complex Na+ 0\n')
+            f.write('addIonsRand complex Cl- 0\n')
+            f.write('savepdb complex complex/complex_restraint.pdb\n')
+            f.write('saveamberparm complex complex/complex_restraint.prmtop complex/complex_restraint.inpcrd\n')
+            if protocol=='absolute-three-step':
+                f.write('savepdb complex complex/complex_decharge.pdb\n')
+                f.write('saveamberparm complex complex/complex_decharge.prmtop complex/complex_decharge.inpcrd\n')
+
+        f.write('\n')
+        f.write('quit\n')
+
+def set_lambda_values(lambda_input):
+    output_lambda_values=None
+
+    if type(lambda_input)==int: 
+        if int(lambda_input)==3:
+            output_lambda_values=[0.1127,0.5,0.88729]
+        elif int(lambda_input)==5:
+            output_lambda_values=[0.04691,0.23076,0.5,0.76923,0.95308]
+        elif int(lambda_input)==7:
+            output_lambda_values=[0.02544,0.12923,0.29707,0.5,0.70292,0.87076,0.97455]
+        elif int(lambda_input)==9:
+            output_lambda_values=[0.01592,0.08198,0.19331,0.33787,0.5,0.66213,0.80669,0.91802,0.98408]
+        elif int(lambda_input)==12:
+            output_lambda_values=[0.00922,0.04794,0.11505,0.20634,0.31608,0.43738,0.56262,0.68392,0.79366,0.88495,0.95206,0.99078]
+        else:
+            output_lambda_values=list(np.linspace(0,1,num=int(lambda_input)))
+            output_lambda_values=[np.around(x,3) for x in output_lambda_values]
+
+    elif type(lambda_input)==list:
+        output_lambda_values=[np.around(float(x),3) for x in lambda_list]
+        if output_lambda_values[-1]>1.0:
+            raise Exception('Error: lambda windows cannot be above 1\n')
+
+    output_lambda_values.sort(reverse=False)
+
+    return output_lambda_values
+
+def write_lambda_windows(media,protocol,schedule,ti_masks,hmass,equil_ns,prod_ns):
+
+    prmtop_list=glob.glob('../%s*prmtop' % (media))
+
+    for prmtop in prmtop_list:
+        prmtop_path=os.path.abspath(prmtop)
+
+        sch=prmtop.split('/')[-1].split('.')[0]
+        lambda_values=set_lambda_values(schedule[sch])
+
+        os.mkdir(sch)
+        os.chdir(sch)
+
+        for i in range(0,len(lambda_values)):
+            #print(i+1,lambda_values[i])
+
+            write_cluster_script(prmtop_path)
+
+            with open('dir_list.dat','a') as f_out:
+                f_out.write('%s\n' % ('lambda_'+str(i)))
+
+            os.mkdir('lambda_'+str(i))
+            os.chdir('lambda_'+str(i))
+
+            write_inputs(protocol,sch,ti_masks,lambda_values[i],lambda_values,hmass,equil_ns,prod_ns)
+
+            # lambda window
+            os.chdir('../')
+
+        # schedule
+        os.chdir('../')
+
+def run_prod(df,protocol='one-step',ti_repeats=1,schedule={'complex_ligands':9,'solvent_ligands':9},hmass=True,equil_ns=1,prod_ns=5):
+
+    # submit all dir lig1->lig2
+    for index,row in df.iterrows():
+        name1=row['Name1']
+        # rbfe
+        if 'Name2' in list(df.columns):
+            name2=row['Name2']
+            pair_dir=name1+'~'+name2
+        # absolute
+        else:
+            pair_dir=name1
+
+        os.chdir(pair_dir)
+
+        # Save TI masks
+        if protocol not in ['absolute','absolute-three-step']:
+            ti_masks=[]
+            counter=1
+            with open('TI_MASKS.dat','r') as f:
+                for line in f:
+                    ti_masks.append(':'+str(counter)+'@'+line.strip('\n'))
+                    counter+=1
+        else:
+            ti_masks=['','']
+
+        for media in ['complex','solvent']:
+            os.chdir(media)
+
+            for rep in range(1,ti_repeats+1):
+                print('Submit production: %s %s repeat %d\n' % (pair_dir,media,rep))
+
+                os.mkdir('%s_rep%d' % (protocol,rep))
+                os.chdir('%s_rep%d' % (protocol,rep))
+
+                # write lambda dir and submit
+                write_lambda_windows(media,protocol,schedule,ti_masks,hmass,equil_ns,prod_ns)
+
+                # repeat
+                os.chdir('../')
+
+            # media
+            os.chdir('../')
+    
+        # pair_dir
+        os.chdir('../')
+        

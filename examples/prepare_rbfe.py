@@ -9,9 +9,23 @@ import timber
 
 ##############################################################################
 
-input_sdf='file.sdf'
+# input settings
+input_sdf='ptp1b_ligands.sdf'
 ff='gaff2'
+prot='ptp1b_protein.cpptraj.pdb'
+protocol='one-step'
+ti_repeats=1
 
+# this is a dict, setting lambda windows
+schedule={'complex_ligands':9,  # one-step, three-step vdw, absolute
+          'solvent_ligands':9,
+          'complex_decharge':5,  # three-step, absolute-three-step
+          'solvent_decharge':5,
+          'complex_recharge':5,  # three-step
+          'solvent_recharge':5,
+          'complex_restraint':5} # absolute
+
+# make a lomap mapping file
 timber.run_lomap(input_sdf,dir_name='lomap_dir',output_name='mapping')
 
 # load molecules
@@ -30,6 +44,7 @@ for m in all_mols:
     if m.GetProp('_Name')!=all_names[0]:
         timber.rms_fit(all_mols[0],m,mcss=full_mcs.smartsString,mcss_exclusion=None,bak_seed=None,tolerance=2.0,ene_cutoff=500)
 
+# read in the lomap network
 df=pd.read_csv('mapping.csv')
 
 # prepare all dir lig1->lig2
@@ -37,4 +52,16 @@ for index,row in df.iterrows():
     name1=row['Name1']
     name2=row['Name2']
     timber.run_rbfe_setup(all_mols[all_names.index(name1)],all_mols[all_names.index(name2)],ff=ff,full_mcs=full_mcs.smartsString,align=True)
+
+    # for absolute runs
+    #timber.run_abfe_setup(all_mols[all_names.index(name1)],ff=ff)
+
+# make build.leap file and build the prmtop
+# [calc ion concentration and correct for ligand present?]
+timber.build_leap(prot,protocol=protocol)
+
+timber.run_build(df,hmass=True,use_openff=False) # i still need to port the openff functions
+
+# submit windows
+timber.run_prod(df,protocol=protocol,ti_repeats=ti_repeats,schedule=schedule,hmass=True,equil_ns=1,prod_ns=5)
 
