@@ -10,7 +10,20 @@ from .molecule_ff import Molecule_ff,add_rd_bonds,get_rdkit_info
 from .geometry import cart_distance
 from .align import get_mcs,rms_fit,rigid_coordinate_set
 from .ligprep_tools import run_antechamber,Info_Mol2,write_rd_pdb,make_off,check_file,setup_hmass
-from .ti_inputs import write_cluster_script,write_inputs
+from .ti_inputs import write_ti_cluster_script,write_ti_inputs
+from .openff_ligprep import off_prmtop_converter 
+
+##############################################################################
+
+# this is a dict, setting lambda windows which can be passed to run_prod 
+#
+# schedule={'complex_ligands':9,  # one-step, three-step vdw, absolute
+#          'solvent_ligands':9,
+#          'complex_decharge':5,  # three-step, absolute-three-step
+#          'solvent_decharge':5,
+#          'complex_recharge':5,  # three-step
+#          'solvent_recharge':5,
+#          'complex_restraint':5} # absolute
 
 ##############################################################################
 
@@ -194,7 +207,7 @@ def run_abfe_setup(rd_mol1,ff='gaff2',dir_1_name='core'):
     writer.write(rd_mol1)
     writer.flush()
 
-    # IMPORTANT - must pass net_charge=Chem.molops.GetFormalCharge(rd_mol1) to get AM1-BCC
+    # IMPORTANT - must pass net_charge=Chem.rdmolops.GetFormalCharge(rd_mol1) to get AM1-BCC
     run_antechamber('for_parm.sdf',residue_name='LIG',ff=ff)
 
     LIG=Molecule_ff(name='LIG')
@@ -211,6 +224,9 @@ def run_abfe_setup(rd_mol1,ff='gaff2',dir_1_name='core'):
     os.chdir('../../')
 
 def run_rbfe_setup(rd_mol1,rd_mol2,ff='gaff2',dir_1_name='core',dir_2_name='sec_lig',full_mcs=None,align=False):
+
+    if ff=='openff':
+        ff='gaff'
 
     if not rd_mol1:
         raise Exception('Error: null mol')
@@ -252,7 +268,7 @@ def run_rbfe_setup(rd_mol1,rd_mol2,ff='gaff2',dir_1_name='core',dir_2_name='sec_
     writer.write(rd_mol1)
     writer.flush()
 
-    # IMPORTANT - must pass net_charge=Chem.molops.GetFormalCharge(rd_mol1) to get AM1-BCC
+    # IMPORTANT - must pass net_charge=Chem.rdmolops.GetFormalCharge(rd_mol1) to get AM1-BCC
     run_antechamber('for_parm.sdf',residue_name='UNL',ff=ff)
 
     LIG=Molecule_ff(name='LIG')
@@ -346,7 +362,7 @@ def check_leap_build(leap_output_file):
 
     return output
 
-def run_build(df,hmass=True,use_openff=False):
+def run_build(df,protocol='one-step',hmass=True,use_openff=False,dir_1_name='core',dir_2_name='sec_lig'):
 
     # check if build.leap exists
     if not check_file('build.leap'):
@@ -378,7 +394,27 @@ def run_build(df,hmass=True,use_openff=False):
 
         # first, do the openff setup
         if use_openff:
-            pass
+            for media in ['complex','solvent']:
+                os.chdir(media)
+
+                if protocol=='one-step':
+                    off_prmtop_converter(media+'_ligands',['../'+dir_1_name+'/LIG','../'+dir_2_name+'/MOD'],xml='openff_unconstrained-2.0.0.offxml')
+                elif protocol=='three-step':
+                    off_prmtop_converter(media+'_ligands',['../'+dir_1_name+'/LIG','../'+dir_2_name+'/MOD'],xml='openff_unconstrained-2.0.0.offxml')
+                    off_prmtop_converter(media+'_decharge',['../'+dir_1_name+'/LIG','../'+dir_1_name+'/LIG'],xml='openff_unconstrained-2.0.0.offxml')
+                    off_prmtop_converter(media+'_recharge',['../'+dir_2_name+'/MOD','../'+dir_2_name+'/MOD'],xml='openff_unconstrained-2.0.0.offxml')
+                elif protocol=='absolute':
+                    off_prmtop_converter(media+'_ligands',['../'+dir_1_name+'/LIG'],xml='openff_unconstrained-2.0.0.offxml')
+                    if media=='complex':
+                        off_prmtop_converter(media+'_restraint',['../'+dir_1_name+'/LIG','../'+dir_1_name+'/LIG'],xml='openff_unconstrained-2.0.0.offxml')
+
+                elif protocol=='absolute-three-step':
+                    off_prmtop_converter(media+'_ligands',['../'+dir_1_name+'/LIG'],xml='openff_unconstrained-2.0.0.offxml')
+                    off_prmtop_converter(media+'_decharge',['../'+dir_1_name+'/LIG','../'+dir_1_name+'/LIG'],xml='openff_unconstrained-2.0.0.offxml')
+                    if media=='complex':
+                        off_prmtop_converter(media+'_restraint',['../'+dir_1_name+'/LIG','../'+dir_1_name+'/LIG'],xml='openff_unconstrained-2.0.0.offxml')
+
+                os.chdir('../')
 
         # prepare the hmass prmtop
         for media in ['complex','solvent']:
@@ -389,7 +425,7 @@ def run_build(df,hmass=True,use_openff=False):
 
         os.chdir('../')
 
-def build_leap(prot,prep_files=None,pdb_files=None,ff='gaff2',protocol='one-step',dir_1_name='core',dir_2_name='sec_lig'):
+def build_ti_leap(prot,prep_files=None,pdb_files=None,protocol='one-step',pos_ion=0,neg_ion=0,ff='gaff2',protein_ff='ff19SB',water_ff='tip3p',ion_ff='ionsjc_tip3p',dir_1_name='core',dir_2_name='sec_lig'):
 
     convert_prep={'off':'loadoff','lib':'loadoff','prep':'loadamberprep','frcmod':'loadamberparams','mol2':'loadmol2','zinc':'source','add':'loadamberparams'}
 
@@ -400,12 +436,12 @@ def build_leap(prot,prep_files=None,pdb_files=None,ff='gaff2',protocol='one-step
         if ff=='openff':
             f.write('source leaprc.protein.ff14SB\n')
         else:
-            f.write('source leaprc.protein.ff19SB\n')
-        f.write('source leaprc.water.tip3p\n')
+            f.write('source leaprc.protein.%s\n' % (protein_ff))
+        f.write('source leaprc.water.%s\n' % (water_ff))
         f.write('source leaprc.phosaa19SB\n')
         # DNA force field
         f.write('source leaprc.DNA.bsc1\n')
-        f.write('loadamberparams frcmod.ionsjc_tip3p\n')
+        f.write('loadamberparams frcmod.%s\n' % (ion_ff))
         # this is for MG ions etc
         f.write('loadamberparams frcmod.ions234lm_126_tip3p\n')
 
@@ -516,8 +552,12 @@ def build_leap(prot,prep_files=None,pdb_files=None,ff='gaff2',protocol='one-step
             f.write('remove complex complex.2\n')
         elif protocol in ['absolute','absolute-three-step']:
             f.write('remove complex complex.2\n')
-        f.write('addIonsRand complex Na+ 0\n')
-        f.write('addIonsRand complex Cl- 0\n')
+        if pos_ion>0 or neg_ion>0:
+            f.write('addIonsRand complex Na+ %d\n' % (pos_ion))
+            f.write('addIonsRand complex Cl- %d\n' % (neg_ion))
+        else:
+            f.write('addIonsRand complex Na+ 0\n')
+            f.write('addIonsRand complex Cl- 0\n')
         f.write('savepdb complex complex/complex_ligands.pdb\n')
         f.write('saveamberparm complex complex/complex_ligands.prmtop complex/complex_ligands.inpcrd\n')
 
@@ -526,24 +566,30 @@ def build_leap(prot,prep_files=None,pdb_files=None,ff='gaff2',protocol='one-step
             f.write('complex=copy complex_all\n')
             f.write('remove complex complex.4\n')
             f.write('remove complex complex.3\n')
-            f.write('addIonsRand complex Na+ 0\n')
-            f.write('addIonsRand complex Cl- 0\n')
+            if pos_ion==0 and neg_ion==0:
+                f.write('addIonsRand complex Na+ 0\n')
+                f.write('addIonsRand complex Cl- 0\n')
             f.write('savepdb complex complex/complex_decharge.pdb\n')
             f.write('saveamberparm complex complex/complex_decharge.prmtop complex/complex_decharge.inpcrd\n')
             f.write('\n')
             f.write('complex=copy complex_all\n')
             f.write('remove complex complex.2\n')
             f.write('remove complex complex.1\n')
-            f.write('addIonsRand complex Na+ 0\n')
-            f.write('addIonsRand complex Cl- 0\n')
+            if pos_ion==0 and neg_ion==0:
+                f.write('addIonsRand complex Na+ 0\n')
+                f.write('addIonsRand complex Cl- 0\n')
             f.write('savepdb complex complex/complex_recharge.pdb\n')
             f.write('saveamberparm complex complex/complex_recharge.prmtop complex/complex_recharge.inpcrd\n')
 
         elif protocol in ['absolute','absolute-three-step']:
             f.write('\n')
             f.write('complex=copy complex_all\n')
-            f.write('addIonsRand complex Na+ 0\n')
-            f.write('addIonsRand complex Cl- 0\n')
+            if pos_ion>0 or neg_ion>0:
+                f.write('addIonsRand complex Na+ %d\n' % (pos_ion))
+                f.write('addIonsRand complex Cl- %d\n' % (neg_ions))
+            else:
+                f.write('addIonsRand complex Na+ 0\n')
+                f.write('addIonsRand complex Cl- 0\n')
             f.write('savepdb complex complex/complex_restraint.pdb\n')
             f.write('saveamberparm complex complex/complex_restraint.prmtop complex/complex_restraint.inpcrd\n')
             if protocol=='absolute-three-step':
@@ -580,9 +626,14 @@ def set_lambda_values(lambda_input):
 
     return output_lambda_values
 
-def write_lambda_windows(media,protocol,schedule,ti_masks,hmass,equil_ns,prod_ns):
+def write_lambda_windows(media,protocol,schedule,ti_masks,ti_mask_len,hmass,equil_ns,prod_ns,monte_water=0,dir_1_name='core',dir_2_name='sec_lig'):
 
     prmtop_list=glob.glob('../%s*prmtop' % (media))
+
+    # need the number of atoms in mol1 and mol2
+    if protocol=='three-step':
+        core=Chem.SDMolSupplier('../../'+dir_1_name+'/LIG.sdf',removeHs=False)[0]
+        sec_lig=Chem.SDMolSupplier('../../'+dir_2_name+'/MOD.sdf',removeHs=False)[0]
 
     for prmtop in prmtop_list:
         prmtop_path=os.path.abspath(prmtop)
@@ -596,7 +647,7 @@ def write_lambda_windows(media,protocol,schedule,ti_masks,hmass,equil_ns,prod_ns
         for i in range(0,len(lambda_values)):
             #print(i+1,lambda_values[i])
 
-            write_cluster_script(prmtop_path)
+            write_ti_cluster_script(prmtop_path)
 
             with open('dir_list.dat','a') as f_out:
                 f_out.write('%s\n' % ('lambda_'+str(i)))
@@ -604,7 +655,10 @@ def write_lambda_windows(media,protocol,schedule,ti_masks,hmass,equil_ns,prod_ns
             os.mkdir('lambda_'+str(i))
             os.chdir('lambda_'+str(i))
 
-            write_inputs(protocol,sch,ti_masks,lambda_values[i],lambda_values,hmass,equil_ns,prod_ns)
+            if protocol=='three-step':
+                write_ti_inputs(protocol,sch,ti_masks,ti_mask_len,lambda_values[i],lambda_values,hmass,equil_ns,prod_ns,monte_water,len(core.GetAtoms()),len(sec_lig.GetAtoms()))
+            else:
+                write_ti_inputs(protocol,sch,ti_masks,ti_mask_len,lambda_values[i],lambda_values,hmass,equil_ns,prod_ns,monte_water)
 
             # lambda window
             os.chdir('../')
@@ -612,7 +666,7 @@ def write_lambda_windows(media,protocol,schedule,ti_masks,hmass,equil_ns,prod_ns
         # schedule
         os.chdir('../')
 
-def run_prod(df,protocol='one-step',ti_repeats=1,schedule={'complex_ligands':9,'solvent_ligands':9},hmass=True,equil_ns=1,prod_ns=5):
+def run_prod(df,protocol='one-step',ti_repeats=1,schedule={'complex_ligands':9,'solvent_ligands':9},hmass=True,equil_ns=1,prod_ns=5,monte_water=0):
 
     # submit all dir lig1->lig2
     for index,row in df.iterrows():
@@ -630,13 +684,16 @@ def run_prod(df,protocol='one-step',ti_repeats=1,schedule={'complex_ligands':9,'
         # Save TI masks
         if protocol not in ['absolute','absolute-three-step']:
             ti_masks=[]
+            ti_mask_len=[]
             counter=1
             with open('TI_MASKS.dat','r') as f:
                 for line in f:
                     ti_masks.append(':'+str(counter)+'@'+line.strip('\n'))
+                    ti_mask_len.append(int(len(line.split(',')))-1)
                     counter+=1
         else:
             ti_masks=['','']
+            ti_mask_len=[0,0]
 
         for media in ['complex','solvent']:
             os.chdir(media)
@@ -648,7 +705,7 @@ def run_prod(df,protocol='one-step',ti_repeats=1,schedule={'complex_ligands':9,'
                 os.chdir('%s_rep%d' % (protocol,rep))
 
                 # write lambda dir and submit
-                write_lambda_windows(media,protocol,schedule,ti_masks,hmass,equil_ns,prod_ns)
+                write_lambda_windows(media,protocol,schedule,ti_masks,ti_mask_len,hmass,equil_ns,prod_ns,monte_water)
 
                 # repeat
                 os.chdir('../')

@@ -4,7 +4,7 @@ import sys
 import numpy as np
 import pandas as pd
 from rdkit import Chem
-from rdkit.Chem import AllChem,SDWriter
+from rdkit.Chem import AllChem,SDWriter,rdmolops
 import timber
 
 ##############################################################################
@@ -56,12 +56,18 @@ for index,row in df.iterrows():
     # for absolute runs
     #timber.run_abfe_setup(all_mols[all_names.index(name1)],ff=ff)
 
-# make build.leap file and build the prmtop
-# [calc ion concentration and correct for ligand present?]
-timber.build_leap(prot,protocol=protocol)
+# get ion numbers for salt concentration. water number is approximated as prot_res*50
+prot_chg,prot_res=timber.protein_charge(prot)
+pos_ion,neg_ion=timber.return_salt(prot_res*50,0.15,prot_chg+int(rdmolops.GetFormalCharge(all_mols[0])))
 
-timber.run_build(df,hmass=True,use_openff=False) # i still need to port the openff functions
+# make build.leap file and build the prmtop
+timber.build_ti_leap(prot,ff=ff,protocol=protocol,pos_ion=pos_ion,neg_ion=neg_ion)
+
+if ff=='openff':
+    timber.run_build(df,protocol=protocol,hmass=True,use_openff=True)
+else:
+    timber.run_build(df,protocol=protocol,hmass=True,use_openff=False)
 
 # submit windows
-timber.run_prod(df,protocol=protocol,ti_repeats=ti_repeats,schedule=schedule,hmass=True,equil_ns=1,prod_ns=5)
+timber.run_prod(df,protocol=protocol,ti_repeats=ti_repeats,schedule=schedule,hmass=True,equil_ns=1,prod_ns=2,monte_water=1)
 

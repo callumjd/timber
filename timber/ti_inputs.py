@@ -6,7 +6,7 @@ import os
 # Modify the cluster submit script and MD inputs as needed
 ##############################################################################
 
-def write_cluster_script(prmtop):
+def write_ti_cluster_script(prmtop):
 
     text1='''#!/bin/bash
 
@@ -43,7 +43,7 @@ $AMBERHOME/bin/pmemd.cuda -O -i prod.in -p $prmtop -c equil.rst7 -ref equil.rst7
         f.write('export inpcrd=%s\n' % (prmtop.replace('prmtop','inpcrd')))
         f.write(text2)
 
-def write_inputs(protocol,schedule,ti_masks,lambda_val,all_lambda_list,hmass=True,equil_ns=1,prod_ns=5):
+def write_ti_inputs(protocol,schedule,ti_masks,ti_mask_len,lambda_val,all_lambda_list,hmass=True,equil_ns=1,prod_ns=5,monte_water=0,n_atoms1=0,n_atoms2=0):
 
     equil_ns=float(equil_ns)
     prod_ns=float(prod_ns)
@@ -66,7 +66,7 @@ def write_inputs(protocol,schedule,ti_masks,lambda_val,all_lambda_list,hmass=Tru
 
     icfe=1 # turn on TI
     
-    # set variables
+    # one-step 
     if protocol=='one-step':
         ti1=':1'
         ti2=':2'
@@ -74,6 +74,61 @@ def write_inputs(protocol,schedule,ti_masks,lambda_val,all_lambda_list,hmass=Tru
         ifsc=1
         nmropt=0
         noshakemask=':1,2'
+
+    # three-step
+    elif protocol=='three-step':
+        ti1=':1'
+        ti2=':2'
+        nmropt=0
+        noshakemask=':1,2'
+
+        if schedule in ['complex_ligands','solvent_ligands']:
+            ifsc=1
+            chg1='@'+str(n_atoms1-ti_mask_len[0]+1)+'-'+str(n_atoms1)
+            chg2='@'+str(n_atoms1+n_atoms2-ti_mask_len[1]+1)+'-'+str(n_atoms1+n_atoms2)
+            charge_mask=chg1+'|'+chg2
+        elif schedule in ['complex_decharge','solvent_decharge']:
+            ifsc=0
+            charge_mask=':2@'+ti_masks[0].split('@')[1]
+            ti_masks=['',''] # over-ride ti_masks
+        elif schedule in ['complex_recharge','solvent_recharge']:
+            ifsc=0
+            charge_mask=':1@'+ti_masks[1].split('@')[1]
+            ti_masks=['',''] # over-ride ti_masks
+
+    # absolute
+    elif protocol in ['absolute','absolute-three-step']:
+        nmropt=1
+
+        if schedule=='complex_restraint':
+            ti1=':1'
+            ti2=':2'
+            charge_mask=''
+            ifsc=0
+            noshakemask=':1,2'
+
+        elif schedule in ['complex_decharge','solvent_decharge']:
+            ti1=':1'
+            ti2=':2'
+            charge_mask=':2'
+            ifsc=0
+            noshakemask=':1,2'
+
+        elif schedule in ['complex_ligands','solvent_ligands']:
+            if protocol=='absolute':
+                ti_masks=[':1',''] # over-ride ti_masks
+                ti1=':1'
+                ti2=''
+                charge_mask=''
+                ifsc=1
+                noshakemask=':1'
+            elif protocol=='absolute-three-step':
+                ti_masks=[':1',':2'] # over-ride ti_masks
+                ti1=':1'
+                ti2=':2'
+                charge_mask=':1,2'
+                ifsc=1
+                noshakemask=':1,2'
 
     # input file templates
     minimise='minimisation\n' \
@@ -188,6 +243,7 @@ def write_inputs(protocol,schedule,ti_masks,lambda_val,all_lambda_list,hmass=Tru
     'ntp = 1, pres0 = 1.0, taup = 2.0, tautp = 1.0, ntt = 3, gamma_ln = 2.0, ntb = 2,\n' \
     'ioutfm = 1,ntxo = 2,iwrap = 0,ig = -1,\n' \
     'cut = 9, barostat = 2,\n' \
+    'mcwat = %d, mcresstr = \"WAT\", nmc = 1000, nmd = 1000,\n' \
     'nmropt = %d,\n' \
     '\n' \
     'gti_add_sc = 1,\n' \
@@ -213,7 +269,7 @@ def write_inputs(protocol,schedule,ti_masks,lambda_val,all_lambda_list,hmass=Tru
     '&end\n' \
     'DISANG=disang.RST\n' \
     '\n' \
-    % (equil_ns,equil_nstlim,dt,int(1000/(dt*1000)),int(1000/(dt*1000)),int(1000/(dt*1000)),int(5000/(dt*1000)),nmropt,icfe,lambda_val,int(len(all_lambda_list)),all_lambda,ifsc,charge_mask,ti1,ti2,ti_masks[0],ti_masks[1])
+    % (equil_ns,equil_nstlim,dt,int(1000/(dt*1000)),int(1000/(dt*1000)),int(1000/(dt*1000)),int(5000/(dt*1000)),monte_water,nmropt,icfe,lambda_val,int(len(all_lambda_list)),all_lambda,ifsc,charge_mask,ti1,ti2,ti_masks[0],ti_masks[1])
 
     prod='Prod %.3f ns NPT\n' \
     '&cntrl\n' \
@@ -225,6 +281,7 @@ def write_inputs(protocol,schedule,ti_masks,lambda_val,all_lambda_list,hmass=Tru
     'ntp = 1, pres0 = 1.0, taup = 2.0, tautp = 1.0, ntt = 3, gamma_ln = 2.0, ntb = 2,\n' \
     'ioutfm = 1,ntxo = 2,iwrap = 0,ig = -1,\n' \
     'cut = 9, barostat = 2,\n' \
+    'mcwat = %d, mcresstr = \"WAT\", nmc = 1000, nmd = 1000,\n' \
     'nmropt = %d,\n' \
     '\n' \
     'gti_add_sc = 1,\n' \
@@ -250,7 +307,7 @@ def write_inputs(protocol,schedule,ti_masks,lambda_val,all_lambda_list,hmass=Tru
     '&end\n' \
     'DISANG=disang.RST\n' \
     '\n' \
-    % (prod_ns,prod_nstlim,dt,int(1000/(dt*1000)),int(1000/(dt*1000)),int(1000/(dt*1000)),int(5000/(dt*1000)),nmropt,icfe,lambda_val,int(len(all_lambda_list)),all_lambda,ifsc,charge_mask,ti1,ti2,ti_masks[0],ti_masks[1])
+    % (prod_ns,prod_nstlim,dt,int(1000/(dt*1000)),int(1000/(dt*1000)),int(1000/(dt*1000)),int(5000/(dt*1000)),monte_water,nmropt,icfe,lambda_val,int(len(all_lambda_list)),all_lambda,ifsc,charge_mask,ti1,ti2,ti_masks[0],ti_masks[1])
 
     # write files
     with open('min.in','w') as f:
