@@ -75,10 +75,8 @@ def perform_analysis(protocol,ti_repeats):
     output_dG=[]
 
     # analytical solvent restraint for absolute runs
-    if protocol=='absolute':
-        solv_rest=get_analytical_rest('complex/absolute_rep1/complex_restraint/lambda_0/disang.RST')
-    elif protocol=='absolute-three-step':
-        solv_rest=get_analytical_rest('complex/absolute-three-step_rep1/complex_restraint/lambda_0/disang.RST')
+    if protocol in ['absolute','absolute-three-step']:
+        solv_rest=get_analytical_rest('disang.RST')
     else:
         solv_rest=0.0
 
