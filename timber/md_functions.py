@@ -1,6 +1,7 @@
 # timber
 
 import math 
+from .ligprep_tools import check_file
 
 ##############################################################################
 
@@ -37,4 +38,59 @@ def return_salt(nwat,conc,charge):
     Nneg=int(math.ceil(N0+(charge/2)))
 
     return Npos,Nneg
+
+def is_water(pdb_file):
+    output=False
+    with open(pdb_file,'r') as f:
+        for line in f:
+            if 'HOH' in line:
+                 output=True
+                 break
+            elif 'WAT' in line:
+                 output=True
+                 break
+
+    return output
+
+def parse_extra(extra,prot):
+
+    # make sure 'pdb' is at the end of this list
+    allowed=['frcmod','lib','off','prep','mol2','zinc','add','pdb']
+
+    init_files=[]
+    for file_name in extra:
+        file_list=glob.glob(file_name)
+        if len(file_list)>0:
+            for val in file_list:
+                my_type=val.split('.')[-1]
+                if my_type in allowed:
+                    if (check_file(val) and val!=prot):
+                        init_files.append(val)
+                    else:
+                        raise Exception('Error: cannot find file %s\n' % (val))
+                else:
+                    raise Exception('Error: tleap cannot parse %s file: %s\n' % (my_type,val))
+        else:
+            raise Exception('Error: cannot find file %s\n' % (file_name))
+
+    prep_files=[]
+    pdb_files=[]
+
+    for file_name in init_files:
+        my_type=file_name.split('.')[-1]
+        if my_type in allowed[0:-1]:
+            prep_files.append(file_name)
+
+    for file_name in init_files:
+        my_type=file_name.split('.')[-1]
+        if my_type=='pdb':
+            pdb_files.append(file_name)
+
+    pdb_files.sort(key=lambda x: os.path.getsize(x),reverse=True)
+
+    for val in pdb_files:
+        if is_water(val):
+            pdb_files.append(pdb_files.pop(pdb_files.index(val)))
+
+    return prep_files,pdb_files
 

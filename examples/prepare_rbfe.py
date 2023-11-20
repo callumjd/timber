@@ -81,3 +81,6 @@ timber.extend_prod(df)
 # run_analysis once runs are complete
 timber.run_analysis(df)
 
+# cinnabar
+timber.run_cinnabar(df)
+

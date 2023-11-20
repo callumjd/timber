@@ -28,3 +28,11 @@ conda install -c conda-forge openmm # possible to specify cuda here
 
 conda install -c conda-forge openmmforcefields
 
+conda install -c conda-forge scikit-learn
+
+pip install adjustText
+
+conda install -c conda-forge plotly
+
+conda install -c anaconda seaborn
+
