@@ -58,3 +58,37 @@ def get_dihedral(point1,point2,point3,point4):
     y = np.dot(np.cross(b1, v), w)
     return np.degrees(np.arctan2(y, x))
 
+## centroid of points ##
+def find_centroid(coord_list):
+    assert isinstance(coord_list,list)
+
+    x_tot=0.0
+    y_tot=0.0
+    z_tot=0.0
+
+    for point in coord_list:
+        x_tot=x_tot+point.x
+        y_tot=y_tot+point.y
+        z_tot=z_tot+point.z
+
+    return Coord(x_tot/float(len(coord_list)),y_tot/float(len(coord_list)),z_tot/float(len(coord_list)))
+
+## closest to anchor ##
+def rank_closest(anchor,point_list):
+
+    dist_val=[]
+    for point in point_list:
+        dist_val.append(cart_distance(anchor,point))
+
+    return int(dist_val.index(min(dist_val)))
+
+## further from anchor ##
+def rank_further(anchor,point_list):
+
+    dist_val=[]
+    for point in point_list:
+        dist_val.append(cart_distance(anchor,point))
+
+    return int(dist_val.index(max(dist_val)))
+
+

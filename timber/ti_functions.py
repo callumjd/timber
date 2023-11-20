@@ -10,7 +10,7 @@ from .molecule_ff import Molecule_ff,add_rd_bonds,get_rdkit_info
 from .geometry import cart_distance
 from .align import get_mcs,rms_fit,rigid_coordinate_set
 from .ligprep_tools import run_antechamber,Info_Mol2,write_rd_pdb,make_off,check_file,setup_hmass
-from .ti_inputs import write_ti_cluster_script,write_ti_inputs
+from .ti_inputs import write_ti_cluster_script,write_ti_inputs,write_ti_cluster_extend
 from .openff_ligprep import off_prmtop_converter 
 
 ##############################################################################
@@ -370,10 +370,12 @@ def run_build(df,protocol='one-step',hmass=True,use_openff=False,dir_1_name='cor
 
     # build all dir lig1->lig2
     for index,row in df.iterrows():
-        name1=row['Name1']
+        name1_col=list(df.columns)[0]
+        name1=row[name1_col]
         # rbfe
-        if 'Name2' in list(df.columns):
-            name2=row['Name2']
+        if len(list(df.columns))==2: 
+            name2_col=list(df.columns)[1]
+            name2=row[name2_col]
             pair_dir=name1+'~'+name2
         # absolute
         else:
@@ -586,7 +588,7 @@ def build_ti_leap(prot,prep_files=None,pdb_files=None,protocol='one-step',pos_io
             f.write('complex=copy complex_all\n')
             if pos_ion>0 or neg_ion>0:
                 f.write('addIonsRand complex Na+ %d\n' % (pos_ion))
-                f.write('addIonsRand complex Cl- %d\n' % (neg_ions))
+                f.write('addIonsRand complex Cl- %d\n' % (neg_ion))
             else:
                 f.write('addIonsRand complex Na+ 0\n')
                 f.write('addIonsRand complex Cl- 0\n')
@@ -663,6 +665,8 @@ def write_lambda_windows(media,protocol,schedule,ti_masks,ti_mask_len,hmass,equi
             # lambda window
             os.chdir('../')
 
+        #os.system('qsub -t 1-%d run_prod.sh' % (len(lambda_values)))
+
         # schedule
         os.chdir('../')
 
@@ -670,10 +674,12 @@ def run_prod(df,protocol='one-step',ti_repeats=1,schedule={'complex_ligands':9,'
 
     # submit all dir lig1->lig2
     for index,row in df.iterrows():
-        name1=row['Name1']
+        name1_col=list(df.columns)[0]
+        name1=row[name1_col]
         # rbfe
-        if 'Name2' in list(df.columns):
-            name2=row['Name2']
+        if len(list(df.columns))==2:
+            name2_col=list(df.columns)[1]
+            name2=row[name2_col]
             pair_dir=name1+'~'+name2
         # absolute
         else:
@@ -698,7 +704,12 @@ def run_prod(df,protocol='one-step',ti_repeats=1,schedule={'complex_ligands':9,'
         for media in ['complex','solvent']:
             os.chdir(media)
 
-            for rep in range(1,ti_repeats+1):
+            # check for existing repeat dirs
+            n_offset=0
+            if len('./'+protocol+'_rep*/')>0:
+                n_offset=int(len(glob.glob('./'+protocol+'_rep*/')))
+
+            for rep in range(1+n_offset,ti_repeats+1+n_offset):
                 print('Submit production: %s %s repeat %d\n' % (pair_dir,media,rep))
 
                 os.mkdir('%s_rep%d' % (protocol,rep))
@@ -715,4 +726,36 @@ def run_prod(df,protocol='one-step',ti_repeats=1,schedule={'complex_ligands':9,'
     
         # pair_dir
         os.chdir('../')
-        
+    
+def extend_prod(df):
+
+    # submit all dir lig1->lig2
+    for index,row in df.iterrows():
+        name1_col=list(df.columns)[0]
+        name1=row[name1_col]
+        # rbfe
+        if len(list(df.columns))==2:
+            name2_col=list(df.columns)[1]
+            name2=row[name2_col]
+            pair_dir=name1+'~'+name2
+        # absolute
+        else:
+            pair_dir=name1
+
+        os.chdir(pair_dir)
+
+        # complex and solvent
+        cwd=os.getcwd()
+        for mydir in glob.glob('complex/*_rep*/*/')+glob.glob('solvent/*_rep*/*/'):
+            os.chdir(mydir)
+            windows=len(glob.glob('lambda_*'))
+            with open('dir_list.dat','w') as f:
+                for i in range(0,windows):
+                    f.write('lambda_%d\n' % (i))
+
+            write_ti_cluster_extend()
+            #os.system('qsub -t 1-%d run_extend.sh')
+            os.chdir(cwd)
+
+        os.chdir('../')
+

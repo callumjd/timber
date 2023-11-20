@@ -10,11 +10,12 @@ import timber
 ##############################################################################
 
 # input settings
-input_sdf='ptp1b_ligands.sdf'
-ff='gaff2'
+input_sdf='file.sdf'
+ff='gaff'
 prot='ptp1b_protein.cpptraj.pdb'
 protocol='one-step'
 ti_repeats=1
+#res_seq=int() # abfe runs require amber numbering residue for Boresch restraint
 
 # this is a dict, setting lambda windows
 schedule={'complex_ligands':9,  # one-step, three-step vdw, absolute
@@ -58,7 +59,7 @@ for index,row in df.iterrows():
 
 # get ion numbers for salt concentration. water number is approximated as prot_res*50
 prot_chg,prot_res=timber.protein_charge(prot)
-pos_ion,neg_ion=timber.return_salt(prot_res*50,0.15,prot_chg+int(rdmolops.GetFormalCharge(all_mols[0])))
+pos_ion,neg_ion=timber.return_salt(nwat=prot_res*50,conc=0.15,charge=prot_chg+int(rdmolops.GetFormalCharge(all_mols[0])))
 
 # make build.leap file and build the prmtop
 timber.build_ti_leap(prot,ff=ff,protocol=protocol,pos_ion=pos_ion,neg_ion=neg_ion)
@@ -68,6 +69,15 @@ if ff=='openff':
 else:
     timber.run_build(df,protocol=protocol,hmass=True,use_openff=False)
 
+# absolute run: write DISANG file - requires an amber numbered res_seq to set residue index for Boresch restraints
+#timber.write_abfe_disang(df,protocol=protocol,res_seq=res_seq)
+
 # submit windows
 timber.run_prod(df,protocol=protocol,ti_repeats=ti_repeats,schedule=schedule,hmass=True,equil_ns=1,prod_ns=2,monte_water=1)
+
+# example to extend the prod sampling (using same prod.in file)
+timber.extend_prod(df)
+
+# run_analysis once runs are complete
+timber.run_analysis(df)
 
