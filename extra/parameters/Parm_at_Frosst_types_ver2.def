@@ -1,0 +1,154 @@
+0H|0He|0Ne|0Ar|0Xe|0Kr|0Rn      desc g
+Li|Ca|Mg|Fe|Zn|Co|Be|Mn|Mo      desc Me
+g-g:V.2|V.3                     desc conj:.
+g:V.2|V.3-g-g:V.2|V.3           desc .:twoconj:.
+N|O|S:conj                      desc res
+g:V.2|V.3                       desc res
+g:AR5|AR6                       desc ar
+N|O|F|S|Cl|Br                   desc elneg
+N:V.3-C:V.3-O|S:V.1             desc namide:.:.
+
+H|g-C:V.3-O:V.1                 desc .:conyl:oonyl
+H|g-C:0ar:V.3-N:V.2             desc .:conyl:.
+O:V.1-C:V.3-O:V.1               desc Ocarbox:.:Ocarbox
+g-O:V.2:v.2-g                   desc .:Oether:.
+
+O:V.1-N:V.3-O:V.1               desc Ocarbox:Nitro:Ocarbox
+O:V.1:v.1-N:V.3:v.3-S|P:V.2-O:V.1:v.1 desc .:Nsulfon:.:.
+O:V.1:v.1-N:V.2:v.2-S|P:V.2-O:V.1:v.1 desc .:Nsulfon:.:.
+
+H:V.1:v.1-S:V.2:v.0-H:V.1:v.1   desc .:sldf:.
+g-S:V.2-H|g                     desc .:sldf:.
+C|N-S:V.4/O:V.1/O:V.1-C|N       desc .:shyp:.
+O:V.1-S:shyp                    desc oonyl:.
+O:V.1-S:V.3/C|N-O:V.1           desc Ocarbox:shyp:Ocarbox
+C|N-S:V.4/O:V.1/O:V.1/O:V.1     desc .:shyp
+g-S:V.4/O:V.1/O:V.1-g           desc .:shyp:.
+O:V.1-S:shyp                    desc Ocarbox:.
+O:V.2-S:shyp                    desc Oether:.
+g-S:V.1                         desc .:sdouble
+
+P-O:V.1                         desc .:oonyl
+O:V.1-P-O:V.1                   desc Ocarbox:.:Ocarbox
+g-O:V.2-S|P                     desc .:Oether:.
+
+C:V.3:AR6:L.0-C:V.3:AR6:L.0     desc  Cbiph:Cbiph
+
+C:2AR6                          desc  Cfused_ar
+C:AR6:AR5                       desc  Cfused_ar
+
+N:V.3:v.2|v.3:AR5               desc  Het5_key
+S:V.2:v.2:AR5                   desc  Het5_key
+O:V.2:v.2:AR5                   desc  Het5_key
+
+C:AR5-C:AR5-N:Het5_key-g:AR5-g:AR5:@1 desc CC:CW:.:.:.
+C:AR5-C:AR5-O:Het5_key-g:AR5-g:AR5:@1 desc CC:CW:.:.:.
+C:AR5-C:AR5-S:Het5_key-g:AR5-g:AR5:@1 desc CC:CW:.:.:.
+
+O:V3:v.1-C:V.4                  desc:oxonium:.
+
+N:0ar:V.3:v.1-C:0ar:V.3/N:0ar:V.3:v.2-N:0ar:V.3:v.1 desc .:C_GUAN:.
+
+
+?                               AT   DU
+g                               AT   gg
+
+
+C:V.3:AR5                             AT C*
+C:V.3:AR?:0AR5                        AT CA
+g:elneg-C:AR5:V.3-g:elneg             AT .:CR:.
+C:AR5-C:AR5-N:Het5_key-g:AR5-g:AR5:@1 AT CC:CW:.:.:.
+C:AR5-C:AR5-O:Het5_key-g:AR5-g:AR5:@1 AT CC:CW:.:.:.
+C:AR5-C:AR5-S:Het5_key-g:AR5-g:AR5:@1 AT CC:CW:.:.:.
+C:CW:AR5-C:CC:AR5-C:AR5-N:AR5:V.2-g:AR5:@1 AT .:.:CR:.:.
+C:Cfused_ar-C:Cfused_ar               AT CB:CB
+C:conyl                               AT C
+C:V.3:0AR?:0Ccarbonyl:0conyl          AT CM
+C:Cbiph                               AT CP
+g:elneg:AR5-C:AR5-g:elneg:AR5         AT .:CR:.
+C:V.4                                 AT CT
+C:V.4:SR3|MR3                         AT CJ
+C:V.2:v.2|v.1:0ar                     AT C2
+C:V.2:v.1:0ar                         AT C2
+
+
+
+N                               AT Nu
+N:V.3|V.4                       AT N3
+N:ar                            AT N*
+g:V.2|V.3-N:0AR?-H              AT .:N:.
+g:ar-N:0AR?                     AT .:N2
+g:ar-N:V.3:ar-H:V.1             AT .:NA:.
+g:ar-N:V.2:ar-g:ar              AT .:NB:.
+N:V.2                           AT  NB
+N:V.2:v.2:AR6                   AT NC
+N:Nitro                         AT N2
+N:v.1|v.2-C:C_GUAN              AT N2
+N:V.3:v.2|v.1:0ar-C:V.3|V.2:0ar AT N2:.
+N:namide                        AT N
+N:V.4                           AT N3
+N:SR3|MR3:V.3|V.4:v.2           AT NJ
+N:V.1:v.1-C:V.2                 AT NL:.
+
+O                               AT OX
+oonyl                           AT O
+Ocarbox                         AT O2
+C:V.4-O:V.1:v.1                 AT .:OS
+Oether                          AT   OS
+N:ar:V.3-O:V.1:v.1              AT .:OS
+N:V.4-O:V.1:v.1                 AT .:OS
+g-O:V.2:v.1-H:V.1:v.1           AT .:OH:HO
+H:V.1-O:V.2:v.0-H:V.1           AT .:OW:.
+O:V.1-S:V.3                     AT O:.
+O:V.3                           AT OH
+O:v.3                           AT OH
+H-O:V.1-H                       AT HO:OH:HO
+H-O:1.1-H                       AT HO:OH:HO
+
+S                               AT Su
+S:sdouble                       AT SD
+S:shyp                          AT SO
+S:sldf                          AT S
+S:sldf-H:V.1                    AT SH
+S:V.3-O:V.1                     AT SO:.
+
+P                               AT P
+
+H                               AT HC
+H-C:V.4                         AT HC
+H-C:V.4/g:elneg                 AT H1:.
+H-C:V.4/g:elneg/g:elneg         AT H2:.
+H-C:V.4/g:elneg/g:elneg/g:elneg AT H3:.
+H-N                             AT H:.
+H-O:V.2                         AT HO:.
+H-O:V.2-H                       AT HW:.:HW
+S:slfd:V.2-H:V.1                AT .:HS
+H-C:V.3                         AT HA:.
+H-C:V.3/g:elneg                 AT H4:.
+H-C:V.3/g:elneg/g:elneg         AT H5:.
+H:V.1-C:V.4/N:V.4:v.3|v.2|v.1   AT HP:.
+H-O:V.2-C:V.4-O:V.2-H           AT HX:.:.:.:HX
+H-O:V.2-C:V.4-N:V.3|V.4:0AR?    AT HX:.:.:.
+H-O:V.3                         AT HO:.
+H-O:v.3                         AT HO:.
+
+F:V.1                           AT F
+Cl:V.1                          AT CL
+CL:V.1                          AT CL
+Cl:V.0                          AT IM
+Br:V.1                          AT BR
+I:V.1                           AT I
+Li                              AT Li
+Na                              AT IP
+K                               AT K
+Rb                              AT Rb
+Cs                              AT Cs
+Ca                              AT CO
+Mg                              AT MG
+Fe                              AT FE
+Cu                              AT CU  
+
+NO:PATTERN                      outmol2   atom_types
+#NO:PATTERN                      outmol2   atom_desc
+#NO:PATTERN                      outmol2   atom_chrg
+
