@@ -1,0 +1,127 @@
+#!/usr/bin/env python
+import os
+import sys
+import numpy as np
+from rdkit import Chem
+from rdkit.Chem import rdMolTransforms
+from rdkit.Chem import AllChem
+from rdkit.Chem import rdMolAlign,rdqueries
+from rdkit.Chem import ChemicalForceFields,rdForceFieldHelpers
+from rdkit.Chem import rdFMCS
+from rdkit.Chem import SDWriter
+import timber
+import argparse
+
+##############################################################################
+### Callum Dickson, GDC CADD (callum.dickson@novartis.com)
+##############################################################################
+
+# Run as:
+#
+# templateAlign_mcss.py -i for_align.sdf -r ref.sdf -o out.sdf -mcss "[c]~[n]"
+#
+
+################################################################################
+
+def align(input_sdf,mcss,reference=None):
+
+    suppl=Chem.SDMolSupplier(input_sdf,removeHs=False)
+    all_mols=[m for m in suppl]
+
+    if reference:
+        ref_mol=Chem.SDMolSupplier(reference,removeHs=False)[0]
+    else:
+        ref_mol=all_mols[0]
+
+    if not ref_mol.HasSubstructMatch(AllChem.MolFromSmarts(mcss)):
+        print('\nError: reference does not have MCSS!\n')
+        sys.exit()
+
+    ctr=0
+    fit_mols=[]
+    for m in all_mols:
+        if m.HasSubstructMatch(AllChem.MolFromSmarts(mcss)):
+            fit_mols.append(m)
+            ctr+=1
+
+    if ctr==0:
+        print('\nError: No molecules have MCSS!\n')
+        sys.exit()
+    else:
+        print('\nFound %d / %d matching MCSS\n' % (ctr,len(all_mols)))
+
+    # do the alignment
+    for mol in fit_mols:
+
+        matches1 = ref_mol.GetSubstructMatches(AllChem.MolFromSmarts(mcss),uniquify=False)
+        matches2 = mol.GetSubstructMatches(AllChem.MolFromSmarts(mcss),uniquify=False)
+
+        msd, match1, match2, weights = timber.compute_msd(ref_mol, mol, matches1, matches2)
+
+        m, wts = (match1,match2),weights
+        m = list(reversed(m))
+        atom_map = list(zip(*m))
+        wts = [min(max(1.e-5, wi), 1.0 - 1.e-5) for wi in wts]
+
+        rdMolAlign.AlignMol(mol, ref_mol, atomMap=atom_map, weights=wts)
+
+        for prb_idx, ref_idx in atom_map:
+            ref_pos = ref_mol.GetConformer().GetAtomPosition(ref_idx)
+            mol.GetConformer().SetAtomPosition(prb_idx, ref_pos)
+
+    return fit_mols,ref_mol
+
+def coord_min(mol_list,mcss):
+
+    for m in mol_list:
+        if m.HasSubstructMatch(AllChem.MolFromSmarts(mcss)):
+            freeze=m.GetSubstructMatches(AllChem.MolFromSmarts(mcss))[0]
+
+            mp = rdForceFieldHelpers.MMFFGetMoleculeProperties(m)
+            ff = rdForceFieldHelpers.MMFFGetMoleculeForceField(m, mp)
+
+            if ff:
+                for i in range(0,len(m.GetAtoms())):
+                    if i not in freeze:
+                        if int(m.GetAtomWithIdx(i).GetAtomicNum())!=1:
+                            ff.MMFFAddPositionConstraint(i, 0.0, 1)
+                    else:
+                        ff.MMFFAddPositionConstraint(i, 0.0, 1.e6)
+
+                ff.Minimize(maxIts=10000, forceTol=0.1)
+
+def run(input_sdf,output_sdf,mcss,reference):
+
+    out_mols,ref_mol=align(input_sdf,mcss,reference)
+
+    coord_min(out_mols,mcss)
+
+    print('Writing %d aligned mols to %s\n' % (len(out_mols),output_sdf))
+
+    writer=SDWriter(output_sdf)
+    for m in out_mols:
+        writer.write(m)
+    writer.flush()
+
+##############################################################################
+## Parse arguments ##
+##############################################################################
+
+def main(argv=None):
+    ## Command line arguments ##
+    parser = argparse.ArgumentParser(description='Use a template to align 3D SDF file by MCSS. If no reference SDF is supplied, the first ligand is used\n')
+    parser.add_argument('-i','--input',dest='i',help='Input SDF file',required=True,type=str)
+    parser.add_argument('-o','--output',dest='o',help='Output SDF file',required=True,type=str)
+    parser.add_argument('-r','--ref',dest='r',help='Template SDF file for alignment (not required)',required=False,type=str)
+    parser.add_argument('-mcss',dest='mcss',help='Smarts string of MCSS',required=True,type=str)
+    args=vars(parser.parse_args())
+
+###############################################################################
+## Run selected protocols ##
+###############################################################################
+    run(args['i'],args['o'],args['mcss'],args['r'])
+
+# MAIN
+if __name__ == '__main__':
+    main()
+

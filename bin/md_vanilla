@@ -1,0 +1,323 @@
+#!/usr/bin/env python
+import os
+import sys
+import glob as glob
+import argparse
+import subprocess
+from rdkit import Chem
+from rdkit.Chem import AllChem,SDWriter
+import timber
+
+##############################################################################
+### Callum Dickson, GDC CADD (callum.dickson@novartis.com)
+##############################################################################
+
+def write_pml(prot,lig,repeats,watmd):
+
+    with open('load_output.pml','w') as f:
+        f.write('load %s\n' % (prot))
+        if lig:
+            f.write('load %s\n' % (lig))
+
+        for i in range(0,repeats):
+            f.write('load run_%d/avg.pdb\n' % (i+1))
+            f.write('set_name avg,%d_avg\n' % (i+1))
+            f.write('load run_%d/represent.pdb\n' % (i+1))
+            f.write('set_name represent,%d_represent\n' % (i+1))
+
+            if watmd:
+                f.write('load run_%d/watmd_out.pdb\n' % (i+1))
+                f.write('set_name watmd_out_CVX,%d_watmd_out_CVX\n' % (i+1))
+                f.write('set_name watmd_out_SUR,%d_watmd_out_SUR\n' % (i+1))
+
+        f.write('show lines\n')
+        if watmd:
+            f.write('hide everything, resn CVX\n')
+            f.write('hide everything, resn SUR\n')
+            f.write('show spheres, (resn CVX and b>2.0)\n')
+            f.write('alter (resn CVX), vdw=(b/10)\n')
+            f.write('spectrum q, red_white_blue, (resn CVX)\n')
+            f.write('show lines, (resn SUR)\n')
+            f.write('spectrum b, blue_white_green, (resn SUR)\n')
+
+        f.write('show cartoon\n')
+        if lig:
+            f.write('orient resn UNL\n')
+
+def write_vmd(sys_name,repeats):
+
+    with open('vmd_script.tcl','w') as f:
+        f.write('mol new %s.resi.prmtop\n' % (sys_name))
+
+        for i in range(0,repeats):
+            f.write('mol addfile run_%d/image.nc waitfor all\n' % (i+1))
+
+    text1='''
+color display background white
+
+mol delrep 0 top
+
+mol selection {resname "UNL"}
+mol representation Bonds 
+mol addrep top
+
+display resetview
+
+mol selection {protein }
+mol representation Cartoon
+mol addrep top
+
+mol selection {protein and not name C and not name N and not name O and not name H}
+mol representation Lines
+mol addrep top
+
+mol selection {resname WAT }
+mol representation Lines
+mol addrep top
+mol showrep 0 3 off
+
+mol selection {all not water }
+mol representation HBonds
+mol addrep top
+mol showrep 0 4 off
+
+animate goto 0
+
+'''
+
+    f=open('vmd_script.tcl','a')
+    f.write(text1)
+    f.close()
+
+def run(prot,lig,extra,repeats,gbsa,watmd,hmass,time,ff,nodel,use_openff,build_file):
+
+    print('\nAmberMD with md_vanilla ...\n')
+
+    # abs path
+    prot=os.path.abspath(prot)
+
+    if build_file:
+        if build_file.split('/')[-1]!='build.leap':
+            print('Error: expecting build file named "build.leap"!\n')
+            sys.exit()
+        else:
+            build_file=os.path.abspath(build_file)
+
+    if extra:
+        for i in range(0,len(extra)):
+            extra[i]=os.path.abspath(extra[i])
+
+    if not timber.initial_prot_check(prot):
+        print('Error: %s file not compatible with Amber!\n' % (prot))
+        sys.exit()
+
+    if repeats<0:
+        print('Error: repeats is negative!\n')
+        sys.exit()
+
+    ################################
+    ### SMALL MOLECULE PARAMETERS
+    ################################
+
+    # ligand run
+    if lig:
+        sys_name='prot_UNL'
+        lig_format=lig.split('.')[-1]
+        if lig_format not in ['mol2','sdf']:
+            print('Error: unknown input format\n')
+            sys.exit()
+        if lig_format=='sdf':
+            mol=Chem.SDMolSupplier(lig,removeHs=False,sanitize=True)
+            mol=[m for m in mol]
+        elif lig_format=='mol2':
+            mol=Chem.MolFromMol2File(lig,removeHs=False,sanitize=True)
+            mol=[mol]
+
+        # check names are compatible
+        ligand_names=[m.GetProp('_Name') for m in mol]
+        if not timber.check_ligand_naming(ligand_names):
+            print('Error: ligand naming not compatible with md_vanilla!\n')
+            sys.exit()
+
+    # apo run
+    else:
+        sys_name='prot_APO'
+        mol=[]
+
+    ################################
+    ### SYSTEM PARAMETERS
+    ################################
+
+    # build ligand parameters
+    if len(mol)==1:
+        print('Launching single ligand run\n')
+        lig_chg=int(Chem.rdmolops.GetFormalCharge(mol[0]))
+        if use_openff:
+            os.system('run_ligprep -i %s -n UNL -ff %s' % (lig,'gaff'))
+        else:
+            os.system('run_ligprep -i %s -n UNL -ff %s' % (lig,ff))
+        if not build_file:
+            timber.run_md_build(prot,'UNL',lig_chg,sys_name,extra,gbsa,ff)
+        else:
+            os.system('cp %s build.leap' % (build_file))
+        timber.cmdline_leap(prot,sys_name,gbsa,hmass,use_openff)
+        dir_list=['./']
+    elif len(mol)==0:
+        gbsa=False
+        print('No ligand specified: launching apo run\n')
+        if not build_file:
+            timber.run_md_build(prot,lig,0,sys_name,extra,gbsa,ff)
+        timber.cmdline_leap(prot,sys_name,gbsa,hmass,use_openff)
+        dir_list=['./']
+    elif len(mol)>1:
+        dir_list=timber.setup_multi_ligand(mol,prot,sys_name,extra,gbsa,ff,build_file)
+        print('Launching %d multi-ligand run\n' % (len(dir_list)))
+        timber.write_cmdline_leap_bash(prot,sys_name,gbsa,hmass,use_openff,ff)
+
+    if len(dir_list)==0:
+        print('Nothing to submit. Exiting.\n')
+        sys.exit()
+
+    ################################
+    ### PREPARE DIRECTORIES
+    ################################
+
+    mdrun_dir_list=[]
+    cwd=os.getcwd()
+    for mydir in dir_list:
+        os.chdir(mydir)
+
+        # Write pymol pml file for the results
+        if len(mol)==1:
+            write_pml(prot,lig,repeats,watmd)
+        else:
+            write_pml(prot,'mol.sdf',repeats,watmd)
+
+        # Write vmd script to load trajectories
+        write_vmd(sys_name,repeats)
+
+        for repeat in range(1,repeats+1):
+            os.mkdir('run_'+str(repeat))
+            os.chdir('run_'+str(repeat))
+
+            # write the md inputs
+            timber.write_md_inputs(time,watmd,hmass)
+            if watmd:
+                if lig:
+                    timber.watmd_cpptraj(prot,apo=False)
+                else:
+                    timber.watmd_cpptraj(prot,apo=True)
+
+            os.chdir('../')
+            mdrun_dir_list.append(mydir+'run_'+str(repeat)) 
+
+        os.chdir(cwd)
+
+    # multi ligand parameters
+    array_idx=len(glob.glob('arrayfiles*'))
+    if not os.path.isdir('arrayfiles%d' % (array_idx)):
+        os.mkdir('arrayfiles%d' % (array_idx))
+
+    if len(mol)>1:
+        with open('arrayfiles%d/mdbaselist.dat' % (array_idx),'w') as f:
+            for name in dir_list:
+                f.write(name+'\n')
+
+        timber.write_cmdline_array('arrayfiles%d/mdbaselist.dat' % (array_idx),len(dir_list))
+        lig_hold_id=subprocess.check_output("qsub -terse mdsetup.sh | awk -F\. '{ print $1 }'", shell=True)
+        lig_hold_id=int(lig_hold_id.strip())
+
+    ################################
+    ### LAUNCH MD
+    ################################
+
+    if time<0.00001:
+        print('Exiting\n')
+        sys.exit()
+
+    with open('arrayfiles%d/mdlist.dat' % (array_idx),'w') as f:
+        for mydir in mdrun_dir_list:
+            f.write(mydir+'\n')
+
+    if len(mol)>1:
+        timber.write_md_cluster_script(sys_name,watmd,'arrayfiles%d/mdlist.dat' % (array_idx),int(repeats*len(dir_list)),lig_hold_id)
+    else:
+        timber.write_md_cluster_script(sys_name,watmd,'arrayfiles%d/mdlist.dat' % (array_idx),int(repeats*len(dir_list)))
+
+    gpu_id=subprocess.check_output("qsub -terse mdrun.sh | awk -F\. '{ print $1 }'", shell=True)
+    gpu_id=int(gpu_id.strip())
+
+    print('Replicates: %d  Production: %.2f ns\n' % (repeats,float(time)))
+
+    ################################
+    ### ANALYSIS 
+    ################################
+
+    if lig:
+        timber.write_analysis_array('arrayfiles%d/mdlist.dat' % (array_idx),task_number=int(repeats*len(dir_list)),nodel=nodel,prot=prot,hold_id=gpu_id,gbsa=gbsa,watmd=watmd)
+        analysis_id=subprocess.check_output("qsub -terse mdanalysis.sh | awk -F\. '{ print $1 }'", shell=True)
+        analysis_id=int(analysis_id.strip())
+
+        # final CPU job to collect data
+        timber.write_md_collect(analysis_id)
+        final_id=subprocess.check_output("qsub -terse mdfinal.sh | awk -F\. '{ print $1 }'", shell=True)
+
+    else:
+        timber.write_analysis_array('arrayfiles%d/mdlist.dat' % (array_idx),task_number=int(repeats*len(dir_list)),nodel=nodel,prot=prot,hold_id=gpu_id,gbsa=False,watmd=watmd,apo=True)
+        analysis_id=subprocess.check_output("qsub -terse mdanalysis.sh | awk -F\. '{ print $1 }'", shell=True)
+        analysis_id=int(analysis_id.strip())
+
+###############################################################################
+## Parse arguments ##
+###############################################################################
+
+def main(argv=None):
+    ## Command line arguments ##
+    parser = argparse.ArgumentParser(description='Submit short MD refinement with AMBER\n')
+
+    parser.add_argument('-p','--prot',dest='p',help='Protein PDB file, prepared for AMBER',type=str,required=True)
+    parser.add_argument('-l','--ligand',dest='l',help='Ligand SDF/MOL2 (can accept multi-ligand SDF file)',type=str,required=False)
+    parser.add_argument('-e','--extra',dest='e',help='Extra system files',action='store',type=str,nargs='*',required=False,default=None)
+    parser.add_argument('-r','--repeats',dest='r',help='MD repeats to run (default 1 repeat)',action='store',type=int,default=1,required=False)
+    parser.add_argument('-gbsa','-pbsa',dest='gbsa',help='Flag to run MM-GBSA & MM-PBSA',action='store_true',required=False,default=False)
+    parser.add_argument('-b','--build',dest='b',help='build.leap file for tleap (optional)',type=str,required=False)
+    parser.add_argument('-watmd',dest='watmd',help='Flag to run WATMD',action='store_true',required=False,default=False)
+    parser.add_argument('-nohmass',dest='nohmass',help='Flag to turn off Hydrogen Mass Repartitioning',action='store_true',required=False,default=False)
+    parser.add_argument('-t','--time',dest='t',help='MD nanoseconds to run (default 2 ns)',action='store',type=float,default=2,required=False)
+    parser.add_argument('-ff',help='Small molecule force field (default gaff2)',dest='ff',choices=['gaff','gaff2','openff'],default='gaff2',required=False)
+    parser.add_argument('-nodel',dest='nodel',help='Flag to optionally NOT delete trajectory files',action='store_true',required=False,default=False)
+
+    args=vars(parser.parse_args())
+
+    # NB Turning hydrogen mass repartitioning ON by default
+    if args['nohmass']:
+        hmass=False
+    else:
+        hmass=True
+
+    # Check environment
+    if 'alchemistry2' not in os.environ['CONDA_DEFAULT_ENV']:
+        print('\nError! md_vanilla requires alchemistry2 conda env\n')
+        print('\nExiting\n')
+        sys.exit()
+
+    # OpenFF flag
+    ff=args['ff']
+    if args['ff']=='openff':
+        use_openff=True
+    else:
+        use_openff=False
+
+    # Turn on PBSA if time<2ns
+    if float(args['t'])<2.01:
+        args['gbsa']=True
+
+###############################################################################
+## Run selected protocols ##
+###############################################################################
+    run(prot=args['p'],lig=args['l'],extra=args['e'],repeats=args['r'],gbsa=args['gbsa'],watmd=args['watmd'],hmass=hmass,time=args['t'],ff=ff,nodel=args['nodel'],use_openff=use_openff,build_file=args['b'])
+
+# MAIN
+if __name__ == '__main__':
+    main()
+

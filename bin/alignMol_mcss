@@ -1,0 +1,185 @@
+#!/usr/bin/env python
+import os
+import sys
+import numpy as np
+import networkx as nx
+from rdkit import Chem
+from rdkit.Chem import rdMolTransforms
+from rdkit.Chem import AllChem
+from rdkit.Chem import rdMolAlign,rdqueries
+from rdkit.Chem import rdFMCS
+from rdkit.Chem import SDWriter
+from rdkit.Chem import ChemicalForceFields,rdForceFieldHelpers
+from rdkit import DataStructs
+from rdkit.Chem.Fingerprints import FingerprintMols
+from rdkit.ML.Cluster import Butina
+import timber
+import argparse
+
+##############################################################################
+### Callum Dickson, GDC CADD (callum.dickson@novartis.com)
+##############################################################################
+
+# Run as:
+#
+# alignMol_mcss.py -i input_sdf.sdf -o output_sdf.sdf 
+#   -mcss_tol 2.0 -rms_tol 1.0 -snap_tol 0.25 -ene_cutoff 25
+
+##############################################################################
+
+def max_mcss(mol_in,mol_list,seed=None):
+
+    sma_mcss=[]
+    len_mcss=[]
+    for mol in mol_list:
+        res=timber.get_mcs([mol_in,mol],seed=seed,strict=False)
+        sma_mcss.append(res)
+        len_mcss.append(res.numAtoms)
+
+    if len(len_mcss)>0:
+        max_idx=len_mcss.index(max(len_mcss))
+        return mol_list[max_idx],sma_mcss[max_idx]
+    else:
+        return mol_list[0],seed
+
+def create_graph_mcss(mol_list,mol_list_noH,seed=None):
+
+    G=nx.DiGraph()
+    G.add_node(mol_list[0])
+
+    mol_list_names=[m.GetProp('_Name') for m in mol_list]
+
+    for i in range(1,len(mol_list)):
+        node_names=[m.GetProp('_Name') for m in list(G.nodes())]
+        list_mol=[m for m in mol_list_noH if m.GetProp('_Name') in node_names]
+
+        neighbour,mcss_smarts=max_mcss(mol_list_noH[i],list_mol,seed=seed)
+
+        G.add_node(mol_list[i])
+        neighbour_mol=mol_list[mol_list_names.index(neighbour.GetProp('_Name'))]
+
+        if mcss_smarts.numAtoms>3:
+            G.add_edge(neighbour_mol,mol_list[i],mcss=mcss_smarts.smartsString)
+        else:
+            G.add_edge(neighbour_mol,mol_list[i],mcss=seed)
+
+        print('Connect base %s to %s' % (neighbour.GetProp('_Name'),mol_list[i].GetProp('_Name')))
+
+    return G
+
+def traverse_graph(G,mol_list,mcss_exclusion=None,bak_seed=None,tolerance=1.0,ene_cutoff=500,snap_tol=5):
+
+    # Traverse graph and fit atoms outside of core mcss
+    print('\nStart: %s\n' % (mol_list[0].GetProp('_Name')))
+    ctr=2
+    fitted_name=[]
+
+    fitted_name.append(mol_list[0].GetProp('_Name'))
+
+    terminal_nodes=[x for x in G.nodes() if G.out_degree(x)==0]
+    for term in terminal_nodes:
+        path=nx.shortest_path(G, source=list(G.nodes())[0], target=term)
+        for node1,node2 in zip(path,path[1:]):
+            if node2.GetProp('_Name') not in fitted_name:
+                timber.rms_fit(node1,node2,mcss=G[node1][node2]['mcss'],mcss_exclusion=mcss_exclusion,bak_seed=bak_seed,tolerance=tolerance,ene_cutoff=ene_cutoff)
+                fitted_name.append(node2.GetProp('_Name'))
+
+                if snap_tol<5:
+                    timber.rigid_coordinate_set(node1,node2,ene_cutoff=ene_cutoff,snap_tol=snap_tol)
+
+                print('Align %s to %s  %d / %d' % (node2.GetProp('_Name'),node1.GetProp('_Name'),ctr,len(mol_list)))
+                ctr+=1
+
+# Main
+def run(input_sdf,output_sdf,mcss_tol,rms_tol,snap_tol,ene_cutoff,hac):
+
+    if not os.path.isfile(input_sdf):
+        print('Error: cannot find %s!\n' % (input_sdf))
+        sys.exit()
+
+    # load molecules
+    suppl=Chem.SDMolSupplier(input_sdf,removeHs=False)
+    all_mols=[m for m in suppl]
+    all_names=[m.GetProp('_Name') for m in suppl]
+
+    suppl_noH=Chem.SDMolSupplier(input_sdf,removeHs=True)
+    all_mols_noH=[m for m in suppl_noH]
+
+    # Full MCSS for the entire set
+    mcs=timber.get_mcs(all_mols_noH,strict=True)
+
+    # Get the template molecule
+    # This sorts "order_name" by either hac or clustering
+    if hac:
+        print('\nUsing lowest HAC mol as seed\n')
+        hac_mols=sorted(all_mols, key=lambda x: int(x.GetNumHeavyAtoms()))
+        fp=FingerprintMols.FingerprintMol(hac_mols[0])
+        sim_list=[FingerprintMols.FingerprintMol(m) for m in hac_mols]
+        sim_score=DataStructs.BulkTanimotoSimilarity(fp,sim_list)
+        order_name = [m.GetProp('_Name') for m in hac_mols]
+        order_name = [x for _,x in sorted(zip(sim_score,order_name),reverse=True)]
+    else:
+        print('\nUsing cluster centre as seed\n')
+        fps = [AllChem.GetMorganFingerprintAsBitVect(x,3,1024) for x in all_mols]
+        order_name=[]
+        cs=timber.ClusterFps(fps,cutoff=0.4)
+        for i in range(0,len(cs)):
+            for j in range(0,len(cs[i])):
+                name=all_mols[cs[i][j]].GetProp('_Name')
+                order_name.append(name)
+
+   # Align full set to template, rigid atom fit
+    template=all_mols[all_names.index(order_name[0])]
+    for m in all_mols:
+        if m.GetProp('_Name')!=order_name[0]:
+            timber.rms_fit(template,m,mcss=mcs.smartsString,mcss_exclusion=None,bak_seed=None,tolerance=mcss_tol,ene_cutoff=500)
+
+    # Create the graph
+    all_mols=sorted(all_mols, key=lambda x: order_name.index(x.GetProp('_Name')))
+    all_mols_noH=sorted(all_mols_noH, key=lambda x: order_name.index(x.GetProp('_Name')))
+
+    G=create_graph_mcss(all_mols,all_mols_noH,seed=mcs.smartsString)
+
+    # Traverse graph and fit atoms outside of core mcss
+    traverse_graph(G,all_mols,mcss_exclusion=mcs.smartsString,bak_seed=mcs.smartsString,tolerance=rms_tol,ene_cutoff=ene_cutoff,snap_tol=snap_tol)
+
+    # Sort by original order
+    all_mols=sorted(all_mols, key=lambda x: all_names.index(x.GetProp('_Name')))
+
+    # Write output
+    print('\nWriting output to %s\n' % (output_sdf))
+    writer=SDWriter(output_sdf)
+    for mol in all_mols:
+        writer.write(mol)
+    writer.flush()
+
+##############################################################################
+# Parse arguments ##
+##############################################################################
+
+def main(argv=None):
+    ## Command line arguments ##
+    parser = argparse.ArgumentParser(description='Align 3D SDF file by MCSS\n')
+    parser.add_argument('-i','--input',dest='i',help='Input SDF file',required=True)
+    parser.add_argument('-o','--output',dest='o',help='Output SDF file',required=False)
+    parser.add_argument('-mcss_tol',dest='mcss_tol',help='Tolerance for initial MCSS fix; default = 2.0 A',required=False,type=float,default=2.0)
+    parser.add_argument('-rms_tol',dest='rms_tol',help='Tolerance for RMS alignment; default = 1.0 A',required=False,type=float,default=1.0)
+    parser.add_argument('-snap_tol',dest='snap_tol',help='Tolerance for rigid atom snapping; default = 0.25 A',required=False,type=float,default=0.25)
+    parser.add_argument('-ene_cutoff',dest='ene_cutoff',help='Energy cut-off for atom rigid snapping; default = 25 kcal/mol',required=False,type=float,default=25)
+    parser.add_argument('-hac',help='Use smallest HAC rather than cluster centre as the initial seed',required=False,action='store_true')
+    args=vars(parser.parse_args())
+
+    if not args['o']:
+        output_sdf='output_aligned_all.sdf'
+    else:
+        output_sdf=args['o']
+
+###############################################################################
+## Run selected protocols ##
+###############################################################################
+    run(args['i'],output_sdf,args['mcss_tol'],args['rms_tol'],args['snap_tol'],args['ene_cutoff'],args['hac'])
+
+# MAIN
+if __name__ == '__main__':
+    main()
+

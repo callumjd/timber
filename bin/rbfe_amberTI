@@ -1,0 +1,383 @@
+#!/usr/bin/env python
+import argparse
+import glob
+import os
+import sys
+import json
+import subprocess
+import pandas as pd
+import numpy as np
+from rdkit import Chem
+from rdkit.Chem import AllChem,SDWriter,rdmolops
+import timber
+
+##############################################################################
+### Callum Dickson, GDC CADD (callum.dickson@novartis.com)
+##############################################################################
+
+def local_transform():
+
+    all_dirs=glob.glob('*~*/')
+    if len(all_dirs)==0:
+        print('Error: analysis did not find TI directories!\n')
+        sys.exit()
+
+    all_ligs=[]
+    first_pair=all_dirs[0].replace('/','')
+    with open('localTransform.csv','w') as f:
+        f.write('Name1,Name2\n')
+        for entry in all_dirs:
+            entry=entry.replace('/','')
+            lig1=entry.split('~')[0].strip()
+            lig2=entry.split('~')[1].strip()
+
+            all_ligs.append(lig1)
+            all_ligs.append(lig2)
+
+            f.write('%s,%s\n' % (lig1,lig2))
+
+    return all_ligs,first_pair
+
+def submit_criteria(sdf_file):
+
+    output=False
+    if sdf_file:
+        suppl=Chem.SDMolSupplier(sdf_file)
+        all_names=[m.GetProp('_Name') for m in suppl if m]
+
+    found_names=[]
+    all_dirs=glob.glob('*~*/')
+
+    if len(all_dirs)==0:
+        output=True
+
+    for entry in all_dirs:
+        entry=entry.replace('/','')
+        lig1=entry.split('~')[0].strip()
+        lig2=entry.split('~')[1].strip()
+
+        found_names.append(lig1)
+        found_names.append(lig2)
+
+    for name in all_names:
+        if name not in found_names:
+            output=True
+            break
+
+    return output
+
+def check_mapping_file(mapfile,sdf_file):
+
+    output=True
+    if not timber.check_file(mapfile):
+        print('Error: %s not found!\n' % (mapfile))
+        output=False
+
+    all_names=[str(m.GetProp('_Name')) for m in Chem.SDMolSupplier(sdf_file)]
+
+    if output==True:
+        with open(mapfile,'r') as f:
+            f.readline()
+            for line in f:
+                if line[0]!='#':
+                    if len(line.strip().split(','))!=2:
+                        output=False
+                        print('Error: %s in mapping file does not specify two ligands!\n' % (line.strip()))
+                        break
+
+    if output==True:
+        with open(mapfile,'r') as f:
+            f.readline()
+            for line in f:
+                if line[0]!='#':
+                    if len(line.split(','))==2:
+                        name1=str(line.split(',')[0].strip())
+                        name2=str(line.split(',')[1].strip())
+                        if name1 not in all_names:
+                            output=False
+                            print('Error: %s not in %s!\n' % (name1,sdf_file))
+                            break
+                        if name2 not in all_names:
+                            output=False
+                            print('Error: %s not in %s!\n' % (name2,sdf_file))
+                            break
+
+    return output
+
+def make_mapping(sdf_file,star,reverse=False):
+
+    mapping_name='mapping'+str(len(glob.glob('mapping*csv')))
+
+    if star and sdf_file:
+        suppl=Chem.SDMolSupplier(sdf_file)
+        all_names=[m.GetProp('_Name') for m in suppl if m]
+
+        if star=='first':
+            star=all_names[0]
+
+        if star not in all_names:
+            print('Error: %s not found in input SDF!\n' % (star))
+            sys.exit()
+
+        else:
+            with open(mapping_name+'.csv','w') as f:
+                f.write('Name1,Name2\n')
+                for name in all_names:
+                    if name!=star:
+                        dir_name=star+'~'+name
+                        if not os.path.isdir(dir_name):
+                            f.write('%s,%s\n' % (star,name))
+                            if reverse:
+                                f.write('%s,%s\n' % (name,star))
+
+    else:
+        lomap_run=str(len(glob.glob('lomap_dir*')))
+        timber.run_lomap(sdf_file,dir_name='lomap_dir'+lomap_run,output_name=mapping_name)
+        timber.connect_rbfe_map(mapping_name+'.csv',sdf_file)
+
+        if reverse:
+            local_df=pd.read_csv(mapping_name+'.csv')
+            reverse_df=local_df.rename(columns={'Name1':'x'})
+            reverse_df=reverse_df.rename(columns={'Name2':'Name1'})
+            reverse_df=reverse_df.rename(columns={'x':'Name2'})
+            local_df=pd.concat([local_df,reverse_df])
+            local_df.to_csv(mapping_name+'.csv',index=False)
+
+    return mapping_name
+
+# MAIN
+def run(prot,sdf_file,extra,ff,windows,repeats,star,protocol,aligned,hmass,mapfile,build_file,data,col,units,reverse,equil_ns,prod_ns,monte_wat,protein_ff,water_ff,nodel):
+
+    # this is a dict, setting lambda windows
+    schedule={'complex_ligands':9,	# one-step, three-step vdw
+          'solvent_ligands':9,
+          'complex_decharge':5,		# three-step
+          'solvent_decharge':5,
+          'complex_recharge':5,		# three-step
+          'solvent_recharge':5,
+          'complex_restraint':5}	# absolute
+
+    if windows!=9:
+        schedule.update({'complex_ligands':windows})
+        schedule.update({'solvent_ligands':windows})
+
+    to_submit=False
+    if (prot or build_file) or (prot and build_file) and sdf_file:
+        if timber.check_file(sdf_file):
+            to_submit=submit_criteria(sdf_file)
+        else:
+            print('Error: cannot find %s!\n' % (sdf_file))
+            sys.exit()
+
+    if mapfile:
+        to_submit=True
+
+    if build_file:
+        if build_file.split('/')[-1]!='build.leap':
+            print('Error: expecting build file named "build.leap"!\n')
+            sys.exit()
+        else:
+            build_file=os.path.abspath(build_file)
+
+    if extra:
+        for i in range(0,len(extra)):
+            extra[i]=os.path.abspath(extra[i])
+
+    if prot:
+        if not timber.check_file(prot):
+            print('Error: cannot find protein PDB %s!\n' % (prot))
+            sys.exit()
+        if not timber.initial_prot_check(prot):
+            print('Error: %s file not compatible with Amber!\n' % (prot))
+            sys.exit()
+
+    ################################
+    ### SUBMIT TI
+    ################################
+    if to_submit:
+
+        print('\nSubmit TI runs\n')
+
+        # load molecules
+        suppl=Chem.SDMolSupplier(sdf_file,removeHs=False)
+        all_mols=[m for m in suppl]
+        all_names=[m.GetProp('_Name') for m in suppl]
+
+        if not timber.check_ligand_naming(all_names):
+            print('Error: ligand names in %s not compatible with RBFE!\n' % (sdf_file))
+            sys.exit()
+
+        # extra files
+        if extra!=None:
+            prep_files,pdb_files=timber.parse_extra(extra,prot)
+        else:
+            prep_files=[]
+            pdb_files=[]
+
+        # make a mapping CSV file
+        if mapfile:
+            if check_mapping_file(mapfile,sdf_file):
+                mapping=mapfile.replace('.csv','')
+            else:
+                print('Exiting: error in %s file\n' % (mapfile))
+                sys.exit()
+        else:
+            mapping=make_mapping(sdf_file,star,reverse)
+
+        # build.leap file
+        if not build_file:
+            if len(prep_files)==0 and (len(pdb_files)==0 or (len(pdb_files)==1 and timber.is_water(pdb_files[0]))):
+                # get ion numbers for salt concentration. water number is approximated as prot_res*50
+                prot_chg,prot_res=timber.protein_charge(prot)
+                pos_ion,neg_ion=timber.return_salt(nwat=prot_res*50,conc=0.15,charge=prot_chg+int(rdmolops.GetFormalCharge(all_mols[0])))
+            else:
+                pos_ion=0
+                neg_ion=0
+
+            timber.build_ti_leap(prot,prep_files=prep_files,pdb_files=pdb_files,protocol=protocol,pos_ion=pos_ion,neg_ion=neg_ion,ff=ff,protein_ff=protein_ff,water_ff=water_ff,ion_ff='ionsjc_tip3p')
+
+        # ligand alignment
+        full_mcs=None
+        if not aligned:
+            suppl_noH=Chem.SDMolSupplier(sdf_file,removeHs=True)
+            all_mols_noH=[m for m in suppl_noH]
+
+            # MCSS for ligand alignment
+            full_mcs=timber.get_mcs(all_mols_noH,strict=True)
+
+            # reference ligand name
+            if star:
+                if star=='first':
+                    ref_name=all_names[0]
+                else:
+                    ref_name=star
+            else:
+                ref_name=timber.get_cluster_center(all_mols_noH)
+
+            # Align all molecules to reference 
+            for m in all_mols:
+                if m.GetProp('_Name')!=ref_name:
+                    timber.rms_fit(all_mols[all_names.index(ref_name)],m,mcss=full_mcs.smartsString,mcss_exclusion=None,bak_seed=None,tolerance=2.0,ene_cutoff=500,initial_rms_tol=1.0)
+
+        # prepare the ligand array job
+        df=pd.read_csv(mapping+'.csv')
+        df=timber.clean_mapping_file(df)
+        if len(df)==0:
+            print('Error: no pairs to submit!\n')
+            sys.exit()
+        print('%d RBFE pairs submitted\n' % (len(df)))
+        print('Protocol: %s  Replicates: %d  Equilibration: %.2f ns  Production: %.2f ns\n' % (protocol,repeats,float(equil_ns),float(prod_ns)))
+
+        # arrayfiles folder
+        if not os.path.exists('arrayfiles'):
+            os.mkdir('arrayfiles')
+        else:
+            if len(glob.glob('arrayfiles/pairname*csv'))>0:
+                os.system('rm arrayfiles/pairname*csv')
+            if len(glob.glob('arrayfiles/ligand_input.sdf'))>0:
+                os.system('rm arrayfiles/ligand_input.sdf')
+
+        # write aligned ligands
+        writer=SDWriter('arrayfiles/ligand_input.sdf')
+        for m in all_mols:
+            writer.write(m)
+        writer.flush()
+
+        # save schedule to json
+        with open('arrayfiles/schedule.json','w') as f:
+            json.dump(schedule,f,indent=6)
+
+        # pairname files
+        for index,row in df.iterrows():
+            df[index:index+1].to_csv('arrayfiles/pairname%d.csv' % (index+1),index=False)        
+
+        # write the setup cpu job
+        if full_mcs:
+            mcss=full_mcs.smartsString
+        else:
+            mcss=None
+
+        # submit the ligand array job
+        timber.write_cmdline_ti_pair('arrayfiles/ligand_input.sdf',ff,mcss,not(aligned),protocol=protocol,hmass=hmass)
+        timber.write_cmdline_ti_pair_array(len(df))
+        hold_id=subprocess.check_output("qsub -terse tisetup.sh | awk -F\. '{ print $1 }'", shell=True)
+        hold_id=int(hold_id.strip())
+
+        # submit the prod job
+        timber.write_cmdline_ti_prod(mapping,protocol,repeats,'arrayfiles/schedule.json',hmass=hmass,equil_ns=equil_ns,prod_ns=prod_ns,monte_wat=monte_wat,nodel=nodel)
+        timber.write_cmdline_ti_prod_array(hold_id)
+        prod_hold_id=subprocess.check_output("qsub -terse tiprod.sh | awk -F\. '{ print $1 }'", shell=True)
+        prod_hold_id=int(prod_hold_id.strip())
+
+    ################################
+    ### ANALYSIS
+    ################################
+
+    else:
+        print('\nRun TI analysis\n')
+        all_ligs,first_pair=local_transform()
+
+        df=pd.read_csv('localTransform.csv')
+
+        timber.run_analysis(df)
+
+        if data:
+            timber.run_cinnabar(df,data=data,col=col,units=units,title='Amber TI',target_name='')
+        else:
+            timber.run_cinnabar(df)
+
+        # TO DO: analysis of prod.nc trajectories (lig_rmsd etc)
+
+        # clean up
+        for f in ['localTransform.csv','data_arsenic.csv']:
+            if timber.check_file(f):
+                os.system('rm %s' % (f))
+
+###############################################################################
+## Parse arguments ##
+###############################################################################
+
+def main(argv=None):
+    ## Command line arguments ##
+    parser = argparse.ArgumentParser(description='Run RBFE calculations with AMBER\n')
+
+    parser.add_argument('-p','--prot',dest='p',help='Protein PDB file, prepared for AMBER',type=str,required=False)
+    parser.add_argument('-sdf',dest='sdf',help='SDF file with ligands',required=False,default=None)
+    parser.add_argument('-e','--extra',dest='e',help='Extra system files',action='store',type=str,nargs='*',required=False,default=None)
+    parser.add_argument('-ff',help='Small molecule force field (default: gaff2)',dest='ff',choices=['gaff','gaff2','openff'],default='gaff2',required=False)
+    parser.add_argument('-w','--windows',dest='w',help='Lambda windows: integer number of windows (default: 9)',action='store',type=int,default=9,required=False)
+    parser.add_argument('-r','--repeats',dest='r',help='TI repeats to run (default: 1)',action='store',type=int,default=1,required=False)
+    parser.add_argument('-star',dest='s',help='Star map reference molecule name',type=str,required=False)
+    parser.add_argument('-protocol','--protocol',dest='protocol',help='one-step or three-step protocol (default: one-step)',type=str,required=False,choices=['one-step','three-step'],default='one-step')
+    parser.add_argument('-aligned',dest='a',help='SDF is pre-aligned (do not run MCSS alignment)',required=False,action='store_true')
+    parser.add_argument('-nohmass',dest='nohmass',help='Flag to turn off Hydrogen Mass Repartitioning',action='store_true',required=False,default=False)
+    parser.add_argument('-m','--map',dest='m',help='Optional mapping CSV file',type=str,required=False)
+    parser.add_argument('-b','--build',dest='b',help='Optional build.leap file for tleap',type=str,required=False)
+    parser.add_argument('-data',dest='d',help='CSV file containing IC50 / Kd values',type=str,required=False)
+    parser.add_argument('-col',dest='c',help='Column of CSV file to take as IC50 / Kd values (default: col 4)',type=int,default=4,required=False)
+    parser.add_argument('-units',dest='u',help='Units of IC50 / Kd values (default: uM)',choices=['mM','uM','nM','pM','fM'],default='uM',required=False)
+    parser.add_argument('-rev','--reverse',dest='rev',help='Do reverse mappings (will double number of TI runs)',action='store_true',required=False,default=False)
+    parser.add_argument('-equil_ns','--equil_ns',dest='equil_ns',help='Equil time in ns (default: 1 ns)',type=float,default=1.0,required=False)
+    parser.add_argument('-prod_ns','--prod_ns',dest='prod_ns',help='Prod time in ns (default: 5 ns)',type=float,default=5.0,required=False)
+    parser.add_argument('-monte_wat','--monte_wat',dest='monte_wat',help='Turn on monte carlo water sampling',required=False,action='store_true')
+    parser.add_argument('-protein_ff',help='Protein force field (default: ff19SB)',dest='protein_ff',choices=['ff19SB','ff14SB','ff15ipq','ff19ipq','fb15'],default='ff19SB',required=False)
+    parser.add_argument('-water_ff',help='Water force field (default: tip3p)',dest='water_ff',choices=['tip3p','opc','spce','spceb','tip4pd','tip4pew','fb3','fb4'],default='tip3p',required=False)
+    parser.add_argument('-nodel',dest='nodel',help='Retain all trajectory files (by default, only end-state prod are kept)',required=False,action='store_true',default=False)
+
+    args=vars(parser.parse_args())
+
+    # NB Turning hydrogen mass repartitioning ON by default
+    if args['nohmass']:
+        hmass=False
+    else:
+        hmass=True
+
+###############################################################################
+## Run selected protocols ##
+###############################################################################
+    run(prot=args['p'],sdf_file=args['sdf'],extra=args['e'],ff=args['ff'],windows=args['w'],repeats=args['r'],star=args['s'],protocol=args['protocol'],aligned=args['a'],hmass=hmass,mapfile=args['m'],build_file=args['b'],data=args['d'],col=args['c'],units=args['u'],reverse=args['rev'],equil_ns=args['equil_ns'],prod_ns=args['prod_ns'],monte_wat=args['monte_wat'],protein_ff=args['protein_ff'],water_ff=args['water_ff'],nodel=args['nodel'])
+
+# MAIN
+if __name__ == '__main__':
+    main()
+

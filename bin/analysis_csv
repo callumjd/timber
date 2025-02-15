@@ -1,0 +1,262 @@
+#!/usr/bin/env python
+import os
+import sys
+import argparse
+import numpy as np
+import pandas as pd
+import timber
+import pytraj as pt
+import mdtraj as md
+import MDAnalysis as mda
+import prolif as plf
+from rdkit import Chem
+from rdkit.Chem import AllChem
+import warnings
+
+##############################################################################
+### Callum Dickson, GDC CADD (callum.dickson@novartis.com)
+##############################################################################
+
+def rmsd_to_df(rmsd,name='rmsd'):
+
+    df=pd.DataFrame(columns=['time_ns',name])
+
+    ctr=0
+    for i in range(0,len(rmsd)):
+        df.at[ctr,'time_ns']=ctr/100
+        df.at[ctr,name]=rmsd[ctr]
+        ctr+=1
+
+    # write file
+    df.to_csv(name+'.csv',index=False)
+
+def rmsf_to_df(rmsf,name='rmsf',res_array=None):
+
+    df=pd.DataFrame(columns=['residue','rmsf'])
+
+    ctr=0
+    for i in range(0,len(rmsf)):
+        if isinstance(res_array,np.ndarray) and len(res_array)==len(rmsf):
+            df.at[ctr,'residue']=res_array[i]
+        else:
+            df.at[ctr,'residue']=rmsf[i][0]
+        df.at[ctr,'rmsf']=rmsf[i][1]
+        ctr+=1
+
+    # write file
+    df.to_csv(name+'.csv',index=False)
+
+def sasa_to_df(sasa_list,name='sasa'):
+
+    df=pd.DataFrame(columns=['time_ns','sasa_avg'])
+
+    for atom in range(0,len(sasa_list[0])):
+        df['sasa_'+str(atom)]=None
+
+    ctr=0
+    for i in range(0,len(sasa_list)):
+        df.at[ctr,'time_ns']=ctr/100
+        df.at[ctr,'sasa_avg']=np.sum(sasa_list[i])
+        for atom in range(0,len(sasa_list[0])):
+            df.at[ctr,'sasa_'+str(atom)]=sasa_list[i][atom]
+
+        ctr+=1
+
+    # write file
+    df.to_csv(name+'.csv',index=False)
+
+def dihe_to_df(dihe,a,b,c,d):
+
+    tor_str='%s-%s-%s-%s' % (str(a),str(b),str(c),str(d))
+
+    df=pd.DataFrame(columns=['time_ns',tor_str])
+
+    ctr=0
+    for i in range(0,len(dihe)):
+        df.at[ctr,'time_ns']=ctr/100
+        df.at[ctr,tor_str]=dihe[ctr]
+        ctr+=1
+
+    # write file
+    df.to_csv('torsion_'+tor_str+'.csv',index=False)
+
+def dump_torsions(pt_traj,rd_mol):
+
+    all_torsion=timber.rotatableTorsions(rd_mol)
+
+    for tor in all_torsion:
+        a=tor[0]
+        b=tor[1]
+        c=tor[2]
+        d=tor[3]
+
+        dihe=pt.dihedral(pt_traj,mask='@%d @%d @%d @%d' % (a+1,b+1,c+1,d+1))
+        dihe_to_df(dihe,a,b,c,d)
+
+def cpptraj_functions(trajfile,prmtopfile,ref_pdb,ligand_str,mol=None):
+
+    # Load traj 
+    pt_traj=pt.load(trajfile,prmtopfile)
+
+    if ref_pdb:
+        # Load the reference PDB file
+        pdb_frame=pt.load(ref_pdb)
+
+    # rms fit and image traj
+    if ref_pdb:
+        # rms fit
+        pt_traj=timber.image_traj(pt_traj,ref_pdb=pdb_frame)
+    else:
+        pt_traj=timber.image_traj(pt_traj)
+
+    # get protein, ligand RMSD
+    prot_rmsd=timber.get_rmsd(pt_traj,'@CA')
+    rmsd_to_df(prot_rmsd,'prot_rmsd')
+    if ligand_str!='':
+        lig_rmsd=timber.get_rmsd(pt_traj,ligand_str)
+        rmsd_to_df(lig_rmsd,'lig_rmsd')
+
+    # write the avg and represent PDB files
+    timber.average_frame(pt_traj,avg_filename='avg.pdb',represent_filename='represent.pdb',lig_mask=ligand_str)
+
+    # dump dssp data
+    resn,dssp_raw,dssp_avg=pt.dssp(pt_traj)
+    pt.to_pickle(resn,'resn_dssp.pkl')
+    pt.to_pickle(dssp_raw,'dssp_raw_dssp.pkl')
+
+    # rmsf data
+    rmsf=pt.rmsf(pt_traj,mask='@CA',options='byres')
+    rmsf_to_df(rmsf,res_array=resn)
+
+    # dump torsion data
+    if mol:
+        dump_torsions(pt_traj,mol)
+
+    # save image traj
+    print('Writing image.nc\n')
+    pt.write_traj('image.nc',traj=pt_traj,overwrite=True,time=True)
+
+    # return the run time in ns, assuming usual prod.in files
+    return len(pt_traj)/100
+
+def prolif_functions(prmtopfile,ligand_str):
+
+    # the input traj is hard coded
+    u = mda.Universe(prmtopfile,'image.nc')
+    lig = u.atoms.select_atoms('resname %s' % (ligand_str.replace(':','')))
+    #prot = u.atoms.select_atoms('protein') CJDedit only use binding site
+    prot = u.atoms.select_atoms('protein and around 12 resname %s' % (ligand_str.replace(':','')))
+
+    fp = plf.Fingerprint()
+
+    # process fp; step size of 2
+    try:
+        # If the RDKit conversion error is received, then exit
+        warnings.filterwarnings("error") 
+        fp.run(u.trajectory[::2], lig, prot, n_jobs=1)
+    except:
+        warnings.resetwarnings()
+        return None
+
+    df=fp.to_dataframe(return_atoms=False,drop_empty=False)
+    df=df.droplevel('ligand',axis=1)
+
+    df=df.replace({True:1,False:0})
+
+    df.to_csv('prolif_all.csv',index=False)
+
+def mdtraj_functions(prmtopfile,ligand_str):
+
+    # the input traj is hard coded
+    traj_md = md.load('image.nc',top=prmtopfile,stride=1)
+
+    ligand = traj_md.topology.select('resname %s' % (ligand_str.replace(':','')))
+    protein = traj_md.topology.select('protein')
+
+    ligand_sasa=[]
+    for frame in range(0,len(traj_md)):
+        if protein[0]<ligand[0]:
+            sasa=md.shrake_rupley(traj_md[frame].atom_slice(np.concatenate((protein,ligand),axis=0)),mode='atom')
+        elif ligand[0]<protein[0]:
+            sasa=md.shrake_rupley(traj_md[frame].atom_slice(np.concatenate((ligand,protein),axis=0)),mode='atom')
+    
+        ligand_sasa.append(sasa[0][ligand])
+
+    sasa_to_df(ligand_sasa)
+
+def run(trajfile,prmtopfile,ref_pdb,ligand_str,sdf_file,pbsa):
+
+    if not timber.check_file(trajfile):
+        print('Error: cannot find %s!\n' % (trajfile))
+        sys.exit()
+
+    if not timber.check_file(prmtopfile):
+        if timber.check_file(prmtopfile.replace('.resi','')):
+            prmtopfile=prmtopfile.replace('.resi','')
+        else:
+            print('Error: cannot find %s!\n' % (prmtopfile))
+            sys.exit()
+
+    if ref_pdb:
+        if not timber.check_file(ref_pdb):
+            print('Error: cannot find %s!\n' % (ref_pdb))
+            sys.exit()
+
+    if sdf_file!="":
+        if not timber.check_file(sdf_file):
+            print('Error: cannot find %s!\n' % (sdf_file))
+            sys.exit()
+        else:
+            mol=Chem.SDMolSupplier(sdf_file,removeHs=False)[0]
+    else:
+        mol=None
+
+    if pbsa:
+        if not all([timber.check_file('../com.prmtop'),timber.check_file('../rec.prmtop'),timber.check_file('../lig.prmtop')]):
+            print('Error: cannot run PBSA analysis!\n')
+            sys.exit()
+
+    # CPPTRAJ functions - data every frame
+    print('Running CPPTRAJ functions\n')
+    time_ns=cpptraj_functions(trajfile,prmtopfile,ref_pdb,ligand_str,mol)
+
+    # MMPBSA - data every 2nd frame
+    if pbsa and ligand_str!='':
+        print('Running MMPBSA analysis\n')
+        timber.write_pbsa_input(filename='mmpbsa.in',time=time_ns)
+        os.system('MMPBSA.py -O -i mmpbsa.in -o FINAL_RESULTS_MMPBSA.dat -sp %s -cp ../com.prmtop -rp ../rec.prmtop -lp ../lig.prmtop -y %s\n' % (prmtopfile.replace('.resi',''),trajfile))
+
+    # PROLIF functions - data every 2nd frame
+    if ligand_str!='':
+        print('Running PROLIF functions\n')
+        prolif_functions(prmtopfile,ligand_str)
+
+    # MDTRAJ functions - data every frame
+    if ligand_str!='':
+        print('Running MDTRAJ functions\n')
+        try:
+            mdtraj_functions(prmtopfile,ligand_str)
+        except:
+            print('Error: SASA calculation failed\n')
+
+##############################################################################
+## MAIN ##
+##############################################################################
+
+def main(argv=None):
+
+    parser = argparse.ArgumentParser(description='Run analysis on protein-ligand MD simulations\n')
+    parser.add_argument('-i',help='trajectory file',dest='i',default='prod.nc',required=False)
+    parser.add_argument('-p',help='prmtop file',dest='p',default='../prot_UNL.resi.prmtop',required=False)
+    parser.add_argument('-r',help='reference PDB file',dest='r',required=False)
+    parser.add_argument('-lig',help='ligand mask string',dest='lig',default=':UNL',required=False)
+    parser.add_argument('-sdf',help='ligand SDF file',dest='sdf',default='../UNL.sdf',required=False)
+    parser.add_argument('-gbsa','-pbsa',dest='gbsa',help='Run MM-GBSA & MM-PBSA analysis',action='store_true',required=False,default=False)
+
+    args=vars(parser.parse_args())
+
+    run(trajfile=args['i'],prmtopfile=args['p'],ref_pdb=args['r'],ligand_str=args['lig'],sdf_file=args['sdf'],pbsa=args['gbsa'])
+
+if __name__=='__main__':
+    main()
+

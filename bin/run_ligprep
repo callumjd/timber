@@ -1,0 +1,123 @@
+#!/usr/bin/env python
+import os
+import sys
+import argparse
+from rdkit import Chem
+from rdkit.Chem import AllChem
+from rdkit.Chem import rdmolops
+from timber import ligprep_tools,openeye_ligprep,molecule_ff
+
+##############################################################################
+### Callum Dickson, GDC CADD (callum.dickson@novartis.com)
+##############################################################################
+
+def check_status(file_name):
+    status=True
+
+    with open(file_name,'r') as f:
+        for line in f:
+            if 'Parameter file was not saved' in line:
+                status=False
+            elif 'Failed to generate parameters' in line:
+                status=False
+
+    return status
+
+def run(input_file,residue_name,ff):
+
+    # error checks
+    if not ligprep_tools.check_file(input_file):
+        print('Error: cannot find %s\n' % (input_file))
+        sys.exit()
+
+    # get the residue name, if specified
+    if len(residue_name)>3:
+        print('Error: residue name must be 3 letters or shorter\n')
+        sys.exit()
+
+    # input format must be mol2/sdf
+    lig_format=input_file.split('.')[-1]
+    if lig_format not in ['mol2','sdf']:
+        print('Error: unknown input format\n')
+        sys.exit()
+
+    # empty mol_ff
+    UNL=molecule_ff.Molecule_ff(name=residue_name)
+
+    print('\nFitting partial charges and %s atom types' % (ff))
+
+    # if openeye is available use quacpac
+    if openeye_ligprep.check_quacpac() and openeye_ligprep.check_omega():
+        charges=openeye_ligprep.openeye_charges(input_file,residue_name)
+
+        # atom types
+        ligprep_tools.run_antechamber(residue_name+'.sdf',residue_name,ff)
+
+        mol=Chem.SDMolSupplier(residue_name+'.sdf',removeHs=False,sanitize=True)[0]
+        UNL=molecule_ff.get_rdkit_info(mol,UNL)
+        UNL=ligprep_tools.Info_Mol2(residue_name+'.mol2',UNL,len(mol.GetAtoms()),fields=['name','type'])
+
+        for i in range(0,len(UNL.atoms)):
+            UNL.atoms[i].atom_charge=charges[i]
+
+    # otherwise, use antechamber for partial charges
+    else:
+
+        if lig_format=='sdf':
+            rdmol=Chem.SDMolSupplier(input_file,removeHs=False,sanitize=True)[0]
+        elif lig_format=='mol2':
+            rdmol=Chem.MolFromMol2File(input_file,removeHs=False,sanitize=True)
+
+        ligprep_tools.run_antechamber(input_file,residue_name,ff,net_charge=Chem.rdmolops.GetFormalCharge(rdmol))
+
+        mol=Chem.SDMolSupplier(residue_name+'.sdf',removeHs=False,sanitize=False)[0]
+        mol=AllChem.AssignBondOrdersFromTemplate(rdmol,mol)
+        Chem.SanitizeMol(mol)
+        UNL=molecule_ff.get_rdkit_info(mol,UNL)
+        UNL=ligprep_tools.Info_Mol2(residue_name+'.mol2',UNL,len(mol.GetAtoms()),fields=['name','type','charge'])
+
+    # save the .off file
+    ligprep_tools.write_rd_pdb(UNL,mol,residue_name,residue_name+'.pdb')
+    ligprep_tools.make_off(UNL,'make_off.leap')
+    os.system('tleap -f make_off.leap>out')
+    os.system('rm out make_off.leap %s.mol2' % (residue_name))
+
+    # check the output
+    if ff=='gaff':
+        if ligprep_tools.check_file('missing_gaff.frcmod'):
+            ligprep_tools.build_parm(UNL.name,'gaff','make_lig.leap',frcmod_file='missing_gaff.frcmod')
+        else:
+            ligprep_tools.build_parm(UNL.name,'gaff','make_lig.leap')
+    elif ff=='gaff2':
+        if ligprep_tools.check_file('missing_gaff2.frcmod'):
+            ligprep_tools.build_parm(UNL.name,'gaff2','make_lig.leap',frcmod_file='missing_gaff2.frcmod')
+        else:
+            ligprep_tools.build_parm(UNL.name,'gaff2','make_lig.leap')
+
+    os.system('tleap -f make_lig.leap>out')
+    status=check_status('out')
+
+    if status:
+        print('\n%s params built\n' % (ff))
+        os.system('rm out leap.log prmtop inpcrd')
+    else:
+        print('Failed to build %s parameters\n' % (ff))
+
+##############################################################################
+## MAIN ##
+##############################################################################
+
+def main(argv=None):
+
+    parser = argparse.ArgumentParser(description='LigPrep AMBER: prepare small molecule parameters with GAFF or GAFF2 force fields\n')
+    parser.add_argument('-i','--input',help='Ligand SDF/MOL2 file',dest='i',required=True)
+    parser.add_argument('-n','--name',help='Residue name (default UNL)',dest='n',default='UNL',required=False)
+    parser.add_argument('-ff',help='Small molecule force field (default gaff2)',dest='ff',choices=['gaff','gaff2'],default='gaff2',required=False)
+
+    args=vars(parser.parse_args())
+
+    run(input_file=args['i'],residue_name=args['n'],ff=args['ff'])
+
+if __name__=='__main__':
+    main()
+
