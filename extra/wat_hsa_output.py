@@ -2,6 +2,11 @@
 import argparse
 import numpy as np
 
+#run_hsa -i ../prot_UNL.prmtop -t wat_image.nc -l ../UNL.pdb -f 40000 -o sstmap
+#cd ./SSTMap_HSA
+#~/scripts/wat_hsa_output.py -i sstmap_hsa_summary.txt
+
+
 E_bulk=-9.53 # tip3p bulk water free energy
 
 if __name__ == '__main__':
