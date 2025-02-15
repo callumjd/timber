@@ -1,0 +1,41 @@
+# Rough guide to parameterizing a covalent ligand to cysteine residue
+# You may need to fill missing parameters from frosst /usr/prog/cadd/amber_tools/parameters/frmod.add
+# Known issue: does not account for symmetry of ligand groups during charge fit
+# (with the exception of CH2, CH3)
+
+1) Extract the ligand and cys residue; keep amide NH, C=O
+
+2) Cap the NH with ACE; cap the C=O with NME group
+
+3) Suggest to do a simple minimization of new caps (eg in MOE)
+
+4) Save as PDB file. Edit the PDB: ensure the full file has single 
+   residue name and residue number
+
+5) Save this PDB as an SDF (eg from MOE) as capped.sdf (name not important)
+
+6) Now run covAMBER:
+
+   i) Run the QM charge fitting (will submit g09 job)
+   
+   python /usr/prog/cadd/amber_tools/extra-scripts/covAMBER/covAMBER.py -i capped.sdf
+
+   ii) Once complete, run resp and build the final COV.pdb and COV.off
+
+   python /usr/prog/cadd/amber_tools/extra-scripts/covAMBER/covAMBER.py -i capped.sdf
+
+7) To use the parameters
+
+   check for missing parameters:
+   edit make_lig.leap changing UNL to COV
+
+   tleap -f make_lig.leap 
+
+   you may have missing angle, dihed; fill from frosst (compare atom types to UNL.off)
+
+8) Edit your protein, fill in COV.pdb replacing ligand, cys residue
+
+   Important! Ensure residue numbers and chain follow correctly
+
+9) Supply COV.off for the MD, specify "-ff frosst" force field
+ 
