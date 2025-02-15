@@ -1,0 +1,5 @@
+trajin ../06_WATMD_f11_1jfht.nc
+center mass origin :1-236 
+image  origin
+rms first mass :1-236@CA,C,N
+average avg.pdb pdb nowrap
