@@ -1,0 +1,38 @@
+
+########
+LINE 91 of stats.py:
+
+if statistic == "rho":
+    return scipt.stats.spearmanr(y_true_sample, y_pred_sample)[0]
+
+########
+LINE 117 of stats.py
+-> insert this:
+to_remove=[] # before for replicate in range(nbootstrap)
+
+########
+LINE 127 OF stats.py
+
+BEFORE:
+	s_n[replicate] = compute_statistic(y_true_sample, y_pred_sample,statistic)
+
+AFTER:
+	# do not run stats when all values in array are identical
+	if len(y_true_sample)>1:
+    		if not (y_true_sample==y_true_sample[0]).all() and not (y_pred_sample==y_pred_sample[0]).all():
+			s_n[replicate] = compute_statistic(y_true_sample, y_pred_sample,statistic)
+	else:
+		to_remove.append(replicate)
+
+s_n=np.delete(s_n,to_remove)
+nbootstrap=len(s_n)
+
+rmse_stats=dict() # etc as before
+
+########
+LINE 175 of plotting.py
+
+-> insert this:
+# check data_labels exist
+if len(data_labels)>0:
+	for i, label in enumerate(data_labels): # etc as before
