@@ -1,0 +1,15 @@
+## alchemistry2
+
+module unload GCC
+module load GCC/6.4.0-2.28
+
+./compile.sh
+
+#example.pyx contains the c/cython function, called factorial
+#compile and call from regular python code use_ex.py
+
+#cython example.pyx
+#python setup.py build_ext --inplace
+
+## cyWATMD.py USAGE ##
+#./cyWATMD.py -i image_traj.nc -p prmtop -nf no_frames -o OUTPUT_PDB.pdb
