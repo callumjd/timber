@@ -1,0 +1,49 @@
+
+module purge
+
+module load Conda
+
+mamba create -p /usr/prog/cadd/amber_tools/alchemistry2 python=3.9
+
+mamba install matplotlib
+
+mamba install -c anaconda networkx
+
+mamba install -c conda-forge openff-toolkit #installs rdkit, mdtraj, ambertools
+
+mamba install lomap2
+
+mamba install -c conda-forge pygraphviz
+
+mamba install -c conda-forge openmm
+
+mamba install -c  conda-forge openmmforcefields
+
+mamba install -c conda-forge scikit-learn
+
+mamba install -c conda-forge plotly
+
+mamba install -c anaconda seaborn
+
+pip install adjustText
+
+pip install git+https://github.com/OpenFreeEnergy/cinnabar
+
+pip install git+https://github.com/openforcefield/openff-models
+
+# parmed error due to most recent openmm version
+mamba install -c conda-forge openmm=7.5.1
+
+mamba install -c  conda-forge  python-louvain
+
+pip install git+git://github.com/dansind/Placevent.git
+pip install grid
+
+# Could not get openff to update
+mamba update -c conda-forge openff-toolkit
+
+cd ~/Downloads
+git clone https://github.com/openforcefield/openff-forcefields.git
+cd lib/python3.9/site-packages/openforcefields/offxml
+cp /home/dicksca3/Downloads/openff-forcefields/openforcefields/offxml/openff_unconstrained-2.2*xml .
+
