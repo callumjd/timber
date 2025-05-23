@@ -1,0 +1,96 @@
+# REINVENT4 TOML input example for reinforcement/curriculum learning
+#
+
+run_type = "staged_learning"
+use_cuda = true
+tb_logdir = "tb_logs"
+##device = "cuda:0"  # set torch device e.g. "cpu" Does this set the device?
+tb_logdir = "tb_logs"
+json_out_config = "staged_learning.json"
+
+[parameters]
+summary_csv_prefix = "staged_learning_stage"
+use_checkpoint = false
+purge_memories = false
+
+## Reinvent
+#prior_file = "priors/reinvent.prior"
+#agent_file = "priors/reinvent.prior"
+
+## LibInvent
+#prior_file = "priors/libinvent.prior"
+#agent_file = "priors/libinvent.prior"
+#smiles_file = "scaffolds.smi"  # 1 scaffold per line with attachment points
+
+## LinkInvent
+#prior_file = "priors/linkinvent.prior"
+#agent_file = "priors/linkinvent.prior"
+#smiles_file = "warheads.smi"  # 2 warheads per line separated with '|'
+
+## Mol2Mol
+#prior_file = "priors/mol2mol_scaffold_generic.prior"
+#agent_file = "priors/mol2mol_scaffold_generic.prior"
+#smiles_file = "mol2mol.smi"  # 1 compound per line
+#sample_strategy = "multinomial"  # multinomial or beamsearch (deterministic)
+#distance_threshold = 100
+
+## Pepinvent
+#prior_file = "priors/pepinvent.prior"
+#agent_file = "priors/pepinvent.prior"
+#smiles_file = "pepinvent.smi"
+#sample_strategy = "multinomial"  # multinomial or beamsearch (deterministic)
+#distance_threshold = 100
+
+batch_size = 64          # network
+
+unique_sequences = true  # if true remove all duplicates raw sequences in each step
+                         # only here for backward compatibility
+randomize_smiles = true  # if true shuffle atoms in SMILES randomly
+
+
+[learning_strategy]
+
+type = "dap"      # dap: only one supported
+sigma = 128       # sigma of the RL reward function
+rate = 0.0001     # for torch.optim
+
+
+[diversity_filter]  # optional, comment section out or remove if unneeded
+                    # NOTE: also memorizes all seen SMILES
+
+type = "IdenticalMurckoScaffold" # IdenticalTopologicalScaffold,
+                                 # ScaffoldSimilarity, PenalizeSameSmiles
+bucket_size = 25                 # memory size in number of compounds
+minscore = 0.4                   # only memorize if this threshold is exceeded
+minsimilarity = 0.4              # minimum similarity for ScaffoldSimilarity
+penalty_multiplier = 0.5         # penalty factor for PenalizeSameSmiles
+
+
+# Reinvent only: guide RL in the initial phase
+#[inception]  # optional, comment sectionout or remove if unneeded
+
+
+### Stage 1
+### Note that stages must always be a list i.e. double brackets
+[[stage]]
+
+chkpt_file = 'stage1.chkpt'  # name of the checkpoint file, can be reused as agent
+
+termination = "simple"  # termination criterion fot this stage
+max_score = 1.0
+min_steps = 5
+max_steps = 500
+
+[stage.scoring]
+type = "geometric_mean"  # aggregation function
+# ---------------------------------------------
+[[stage.scoring.component]]
+[stage.scoring.component.ExternalProcess]
+[[stage.scoring.component.ExternalProcess.endpoint]]
+name="Score"
+weight=1
+[stage.scoring.component.ExternalProcess.endpoint.params]
+executable="/usr/bin/env python"
+args="my_score.py"
+# ---------------------------------------------
+
