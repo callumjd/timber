@@ -7,12 +7,6 @@ __all__ = ['align','energy','geometry','ligprep_tools','lomap','md_analysis','md
 import warnings
 warnings.filterwarnings("ignore")
 
-# workaround to force alchemistry2 version of parmed
-import os
-import sys
-if 'alchemistry2' in os.environ['CONDA_DEFAULT_ENV']:
-    sys.path.insert(0,'/usr/prog/cadd/amber_tools/alchemistry2/lib/python3.9/site-packages')
-
 from .align import *
 from .energy import *
 from .geometry import *
