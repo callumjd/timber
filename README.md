@@ -1,3 +1,4 @@
-TIMBER: prepare, run and analyse Amber TI free energy
+#TIMBER
+Prepare, run and analyse Amber TI free energy
 
 ( ... documentation coming soon)
