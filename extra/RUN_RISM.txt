@@ -1,9 +1,0 @@
-
-sander -i mdin.rism -o mdout -p prmtop -c inpcrd -O -xvv $AMBERHOME/dat/rism1d/cSPCE/cSPCE_kh.xvv -guv md_guv
-
-placevent.py md_guv.O.0.dx 55.5 > O.pdb
-
-cp O.pdb rism_wat.pdb
-
-sed -i "s/D BCD/O WAT/g" rism_wat.pdb
-
